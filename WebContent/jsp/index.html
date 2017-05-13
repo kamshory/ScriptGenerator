@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Script Generator for JSP+PostgreSQL</title>
+<script type="text/javascript" src="../js/jquery/js/jquery-1.11.1.min.js"></script>
+<script type="text/javascript" src="../js/jquery/js/jquery-ui-1.10.4.custom.min.js"></script>
+<link rel="stylesheet" type="text/css" href="../js/jquery/css/base/jquery-ui-1.10.4.custom.min.css">
+<link rel="stylesheet" href="../js/cm/lib/codemirror.css">
+<script src="../js/cm/lib/codemirror.js"></script>
+<script src="../js/cm/addon/mode/loadmode.js"></script>
+<script src="../js/cm/mode/meta.js"></script>
+<link rel="stylesheet" type="text/css" href="../js/cm/lib/codemirror.css">
+<script src="../js/cm/lib/codemirror.js" type="text/javascript"></script>
+<script src="../js/cm/mode/clike/clike.js" type="text/javascript"></script>
+<style type="text/css">
+body{
+	font-family:Arial, Helvetica, sans-serif;
+	font-size:12px;
+	margin:0;
+	padding:0;
+}
+.all{
+	padding:5px;
+}
+.main-table{
+	border-collapse:collapse;
+	border-color:#0E518C;
+}
+.main-table td{
+	padding:4px;
+	border-color:#0E518C;
+}
+.main-table thead td{
+	background-color:#125A98;
+	color:#FFFFFF;
+	font-weight:bold;
+}
+.main-table td select{
+	width:100%;
+	box-sizing:border-box;
+}
+.main-table td input[type="text"]{
+	width:100%;
+	box-sizing:border-box;
+}
+select{
+	padding:4px;
+	font-family:Arial, Helvetica, sans-serif;
+	font-size:12px;
+	color:#333333;
+	background-color:#FFFFFF;
+	border:1px solid #BBBBBB;
+}
+input[type="text"], input[type="password"]{
+	padding:5px;
+	font-family:Arial, Helvetica, sans-serif;
+	font-size:12px;
+	color:#333333;
+	background-color:#FFFFFF;
+	border:1px solid #BBBBBB;
+}
+form{
+	margin:0;
+	padding:0;
+}
+input, select, textarea, button{
+	margin:0;
+}
+.config-table td{
+	padding:4px 0;
+}
+.config-table input[type="text"], .config-table input[type="password"]{
+	width:240px;
+	padding:6px;
+}
+input[type="button"], input[type="reset"], input[type="submit"], button{
+	padding:6px 14px;
+	border:1px solid #CCCCCC;
+	background-color:#EEEEEE;
+	color:#333333;
+}
+.database-info{
+	padding:0 0 4px 0;
+}
+.info-cell{
+	display:inline-block;
+	padding-right:20px;
+}
+.text-code{
+	box-sizing:border-box;
+	padding:10px;
+	font-family:Arial, Helvetica, sans-serif;
+	font-size:12px;
+	color:#333333;
+	background-color:#FFFFFF;
+	border:1px solid #BBBBBB;
+	resize:vertical;
+}
+.ui-tabs .ui-tabs-panel{
+	padding:10px;
+}
+.define-wrapper{
+	display:none;
+}
+.button-area{
+	padding-top:8px;
+}
+.CodeMirror {
+	line-height:1.6;
+	height: calc(100vh - 80px);
+}
+.code-area{
+	margin: -10px -10px -11px -10px;
+	display:none;
+}
+.desc{
+	line-height:1.5;
+}
+</style>
+
+<script type="text/javascript">
+var initielized = false;
+var editor = null;
+function initCodeMirror()
+{
+	if(!initielized)
+	{
+		$('.code-area').css({'display':'block'});
+		editor = CodeMirror.fromTextArea(document.getElementById("text-code"), {
+			lineNumbers: true,
+			matchBrackets: true,
+			mode: "text/x-csrc"
+		});
+		initielized = true;
+	}
+}
+$(document).ready(function(e) {
+    $('.tabs').tabs();
+
+	$(document).on('submit', '#formgenerator', function(e)
+	{
+		//alert('Generate Script Here');
+		$('.tabs').find(' > ul > li > a[href="#result"]').click();
+		var formData = $(this).serializeArray(); 
+		var script = "";
+		script += generateAuthentification(formData);
+		script += generateController(formData);
+		script += generateInsertUI(formData);
+		script += generateUpdateUI(formData);
+		script += generateDetailUI(formData);
+		script += generateListUI(formData);
+		
+		if($('#quote')[0].checked)
+		{
+		}
+		else
+		{		
+			script = finalizeString(script);
+		}
+		
+		initCodeMirror();
+		
+		editor.getDoc().setValue(script);
+		e.preventDefault();
+	});
+	$(document).on('click', '#load_table', function(e){
+		var selector = ".main-table tbody";
+		var url = "list-table.jsp";
+		var host = $('.config-table [name="host"]').val();
+		var port = $('.config-table [name="port"]').val();
+		var username = $('.config-table [name="username"]').val();
+		var password = $('.config-table [name="password"]').val();
+		var database = $('.config-table [name="database"]').val();
+		var table = $('.config-table [name="table"]');
+		$.ajax({
+			url:url,
+			data:{host:host, port:port, username:username, password:password, database:database},
+			type:"GET",
+			dataType:"JSON",
+			success: function(data)
+			{
+				var i;
+				var tablename;
+				var DOMHTML;
+				table.replaceWith($('<select name="table" id="table"></select>'));
+				for(i in data)
+				{
+					tablename = data[i].table_name;
+					$('.config-table [name="table"]').append('<option value="'+tablename+'">'+tablename+'</option>');
+				}
+			}
+		});
+	
+	});
+	$(document).on('click', '#load_structure', function(e){
+		var selector = ".main-table tbody";
+		var url = "structure.jsp";
+		var host = $('.config-table [name="host"]').val();
+		var port = $('.config-table [name="port"]').val();
+		var username = $('.config-table [name="username"]').val();
+		var password = $('.config-table [name="password"]').val();
+		var database = $('.config-table [name="database"]').val();
+		var table = $('.config-table [name="table"]').val();
+		loadJSONFromServer(selector, url, host, port, username, password, database, table);
+		$('.label-for-host').text(host);
+		$('.label-for-database').text(database);
+		$('.label-for-table').text(table);
+		$('.define-wrapper').css({display:"block"});
+		$('.tabs').find(' > ul > li > a[href="#define"]').click(); 
+		$('#formgenerator input[name="table"]').val(table);
+	});
+	$(document).on('change keyup blur', '#formdatabase input[type="text"]', function(e){
+		var name = $(this).attr('name');
+		var value = $(this).val();
+		window.localStorage.setItem('sg_'+name, value);
+	});
+	
+	$(document).on('change', '.list_filter', function(e){
+		var obj = $(this);
+		var value = obj.attr('value');
+		var name = obj.attr('name');
+		var chk = obj[0].checked;
+		if(chk)
+		{
+			var contra = getContraVal(value);
+			$('[name="'+name+'"][value="'+contra+'"]')[0].checked = false;
+			console.log(contra);
+		}
+	});
+	
+	loadConfig();
+});
+function getContraVal(val)
+{
+	if(val == 'text') return 'select';
+	if(val == 'select') return 'text';	
+}
+function loadConfig()
+{
+	var host = window.localStorage.getItem('sg_host') || '';
+	var port = window.localStorage.getItem('sg_port') || '';
+	var username = window.localStorage.getItem('sg_username') || '';
+	var password = window.localStorage.getItem('sg_password') || '';
+	var database = window.localStorage.getItem('sg_database') || '';
+	var table = window.localStorage.getItem('sg_table') || '';
+	$('.config-table [name="host"]').val(host);
+	$('.config-table [name="port"]').val(port);
+	$('.config-table [name="username"]').val(username);
+	$('.config-table [name="password"]').val(password);
+	$('.config-table [name="database"]').val(database);
+	$('.config-table [name="table"]').val(table);
+
+}
+
+function finalizeString(script)
+{
+	script = script.replaceAll('\\"', '');
+	//script = script.replaceAll('jsp_tag_open_out', '<%=');
+	//script = script.replaceAll('jsp_tag_close_out', '%>');
+	//script = script.replaceAll('<%=="" (d__', '<%== ');
+	//script = script.replaceAll('?"="" checked="\&quot;checked\&quot;&quot;:&quot;&quot;" %>=""', '?" checked=\\"checked\\"":"" %>');
+	return script;
+}
+
+function generateAuthentification(formData)
+{
+	var script = '<%@ include file="lib.inc/auth-with-login-form.jsp" %>';
+	return script;
+}
+
+function generateController(formData)
+{
+	var i, j, k;
+	var fields = getFieldValues(formData, 'field');
+	var currentTable = getFieldValues(formData, 'table')[0];
+	var values = [];
+	
+	var pk = getPrimaryKey(formData);
+	var pkey = (pk.length)?pk[0]:fields[0];
+	var pkeyFilter = getSelectedFilterType(formData, pkey);
+	
+	var filter = '';
+	var script = '';
+	script += '<%\r\n';
+	
+	script += '// declare all variables\r\n\r\n';
+	script += 'String __self_name = "'+currentTable.replaceAll('_', '-')+'.jsp";\r\n';
+	script += 'String __table_name = "'+currentTable+'";\r\n';
+	script += 'String __module_name = "'+currentTable.replaceAll('_', '-')+'";\r\n';
+	script += 'String __module_title = "'+currentTable.replaceAll('_', ' ').capitalize().prettify()+'";\r\n';
+	
+	script += 'String __pkey_name = "'+pkey+'";\r\n';
+	script += 'String __pkey_value = "";\r\n';
+	script += 'String __na_name = "active";\r\n';
+	
+	script += 'String __query;\r\n';
+	script += 'String __action = filterInput(request, "user_action", "FILTER_SANITIZE_STRING", true);\r\n';
+	script += 'String __activate = filterInput(request, "data_activate", "FILTER_SANITIZE_STRING", true);\r\n';
+	script += 'String __deactivate = filterInput(request, "data_deactivate", "FILTER_SANITIZE_STRING", true);\r\n';
+	script += 'String __delete = filterInput(request, "data_delete", "FILTER_SANITIZE_STRING", true);\r\n\r\n';
+	script += 'String __save = filterInput(request, "button_save", "FILTER_SANITIZE_STRING", true);\r\n\r\n';
+	script += 'int int_i = 0, int_j = 0, int_k = 0;\r\n';
+	
+	var insertFields = getInsertFields(formData);
+	var updateFields = getUpdateFields(formData);
+	var insertUpdateFields = arrayUnique(insertFields.concat(updateFields));
+
+	// fields di sini adalah field gabungan antara insert dan update
+
+	for(i in insertUpdateFields)
+	{
+		script += 'String r__'+insertUpdateFields[i]+' = "";\r\n';
+	}
+
+	script += 'if(__action.equals("insert") || __action.equals("update")) \r\n{\r\n';
+
+
+	
+	for(i in insertUpdateFields)
+	{
+		filter = getSelectedFilterType(formData, insertUpdateFields[i]);
+		script += 'r__'+insertUpdateFields[i]+' = filterInput(request, "'+insertUpdateFields[i]+'", "'+filter+'", true);\r\n';
+	}
+	script += '}\r\n\r\n';
+
+	
+	
+	// insert
+	values = [];
+	for(i in insertFields)
+	{
+		values[i] = 'r__'+insertFields[i];
+	}
+	script += '// [INSERT BEGIN]\r\n';
+	script += '// TODO: Here are your code to insert data to database\r\n';
+	script += 'if(__action.equals("insert") && !__save.equals("")) \r\n{\r\n';
+	script += 'if(hasPermission(__userLevel, __module_name, "insert"))\r\n{\r\n';
+	script += '\t__query = "insert into \\"'+currentTable+'\\" "+\r\n\t"(\\"' + insertFields.join('\\", \\"')+'\\") values " +\r\n\t"(\'\"+' + values.join('+"\', \'\"+')+'+"\');";\r\n';
+	script += '\tdb_rs = database.executeQuery(__query);\r\n';
+	script += '\tint newID = database.getLastID();\r\n';
+	script += '\tresponse.sendRedirect(__self_name+"?user_action=detail&'+pkey+'="+newID);\r\n';
+	script += '}\r\n';
+	
+	script += 'else\r\n{\r\n// TODO: add your code here when user does not have permission to insert new data\r\n\r\n}\r\n';
+	
+	script += '}\r\n';
+	script += '// [INSERT END]\r\n';
+
+	script += '\r\n\r\n';
+
+	// update
+	values = [];
+	for(i in updateFields)
+	{
+		values[i] = 'r__'+updateFields[i];
+	}
+	script += '// [UPDATE BEGIN]\r\n';
+	script += '// TODO: Here are your code to update data to database\r\n';
+	script += 'if(__action.equals("update") && !__save.equals("")) \r\n{\r\n';
+	script += 'if(hasPermission(__userLevel, __module_name, "update"))\r\n{\r\n';
+	script += '\t__pkey_value = filterInput(request, "'+pkey+'", "'+pkeyFilter+'", true);\r\n';
+	script += '\t__query = "update \\"'+currentTable+'\\" set "+\r\n';
+	var ss = [];
+	for(i in updateFields)
+	{
+		ss.push('\\"'+updateFields[i]+'\\" = \'"+r__'+updateFields[i]+'+"\'');
+	}
+	script += '\t"'+ss.join(', ')+'"+\r\n';
+	script += '\t"where \\"'+pkey+'\\" = \'"+__pkey_value+"\' ";\r\n';
+	script += '\tdb_rs = database.executeQuery(__query);\r\n';
+	script += '\tresponse.sendRedirect(__self_name+"?user_action=detail&'+pkey+'="+__pkey_value);\r\n';
+	script += '}\r\n';
+	
+	script += 'else\r\n{\r\n// TODO: add your code here when user does not have permission to update data\r\n\r\n}\r\n';
+	
+	script += '}\r\n';
+	script += '// [UPDATE END]\r\n';
+
+	script += '\r\n\r\n';
+
+	// activate
+	script += '// [ACTIVATE BEGIN]\r\n';
+	script += '// TODO: Here are your code to activate selected data\r\n';
+	script += '//       You can add filter here or modify the default code\r\n';
+	script += 'if(!__activate.equals("")) \r\n{\r\n';
+	script += 'if(hasPermission(__userLevel, __module_name, "update"))\r\n{\r\n';
+	script += 'try\r\n{\r\n';
+	script += '\tString[] activate_key_array = getRequestArray(request, __pkey_name);\r\n';
+	script += '\tfor(int_i = 0; int_i < activate_key_array.length; int_i++)\r\n'
+	script += '\t{\r\n';
+	script += '\t\tdatabase.setRecordValue("'+currentTable+'", "'+pkey+'", activate_key_array[int_i], __na_name, "1");\r\n';
+	script += '\t}\r\n';
+	script += '\tresponse.sendRedirect(__self_name);\r\n';
+	script += '}\r\n';
+	script += 'catch(Exception e)\r\n';
+	script += '{\r\n';
+	script += '}\r\n';
+	script += 'finally\r\n';
+	script += '{\r\n';
+	script += '}\r\n';
+	script += '}\r\n';
+	
+	script += 'else\r\n{\r\n// TODO: add your code here when user does not have permission to update data\r\n\r\n}\r\n';
+	
+	script += '}\r\n';
+	script += '// [ACTIVATE END]\r\n';
+
+	script += '\r\n\r\n';
+
+	// deactivate
+	script += '// [DEACTIVATE BEGIN]\r\n';
+	script += '// TODO: Here are your code to deactivate selected data\r\n';
+	script += '//       You can add filter here or modify the default code\r\n';
+	script += 'if(!__deactivate.equals("")) \r\n{\r\n';
+	script += 'if(hasPermission(__userLevel, __module_name, "update"))\r\n{\r\n';
+	script += 'try\r\n{\r\n';
+	script += '\tString[] deactivate_key_array = getRequestArray(request, __pkey_name);\r\n';
+	script += '\tfor(int_i = 0; int_i < deactivate_key_array.length; int_i++)\r\n'
+	script += '\t{\r\n';
+	script += '\t\tdatabase.setRecordValue("'+currentTable+'", "'+pkey+'", deactivate_key_array[int_i], __na_name, "0");\r\n';
+	script += '\t}\r\n';
+	script += '\tresponse.sendRedirect(__self_name);\r\n';
+	script += '}\r\n';
+	script += 'catch(Exception e)\r\n';
+	script += '{\r\n';
+	script += '}\r\n';
+	script += 'finally\r\n';
+	script += '{\r\n';
+	script += '}\r\n';
+	script += '}\r\n';
+	
+	script += 'else\r\n{\r\n// TODO: add your code here when user does not have permission to update data\r\n\r\n}\r\n';
+	
+	script += '}\r\n';
+	script += '// [ACTIVATE END]\r\n';
+
+	script += '\r\n\r\n';
+
+	// delete
+	script += '// [DELETE BEGIN]\r\n';
+	script += '// TODO: Here are your code to deactivate selected data\r\n';
+	script += '//       You can add filter here or modify the default code\r\n';
+	script += 'if(!__delete.equals("")) \r\n{\r\n';
+	script += 'if(hasPermission(__userLevel, __module_name, "delete"))\r\n{\r\n';
+	script += 'try\r\n{\r\n';
+	script += '\tString[] delete_key_array = getRequestArray(request, __pkey_name);\r\n';
+	script += '\tfor(int_i = 0; int_i < delete_key_array.length; int_i++)\r\n'
+	script += '\t{\r\n';
+	script += '\t\tdatabase.deleteRecord("'+currentTable+'", "'+pkey+'", delete_key_array[int_i]);\r\n';
+	script += '\t}\r\n';
+	script += '\tresponse.sendRedirect(__self_name);\r\n';
+	script += '}\r\n';
+	script += 'catch(Exception e)\r\n';
+	script += '{\r\n';
+	script += '}\r\n';
+	script += 'finally\r\n';
+	script += '{\r\n';
+	script += '}\r\n';
+	script += '}\r\n';
+	
+	script += 'else\r\n{\r\n// TODO: add your code here when user does not have permission to delete data\r\n\r\n}\r\n';
+	
+	script += '}\r\n';
+	script += '// [DELETE END]\r\n';
+
+	script += '%>';
+	
+	return script;
+}
+
+function generateInsertUI(formData)
+{
+	var insertFields = getInsertFields(formData);
+	var i, j, k, inputEl, caption;
+	var script = '';
+	var field = '';
+	var currentTable = getFieldValues(formData, 'table')[0];
+	var pk = getPrimaryKey(formData);
+	var pkey = (pk.length)?pk[0]:insertFields[0];
+	
+	script += '<%\r\n';
+	script += 'if(__action.equals("insert"))\r\n{\r\n';
+	script += '// TODO: Here are your code for insert UI\r\n';
+	script += 'if(hasPermission(__userLevel, __module_name, "insert"))\r\n{\r\n';	
+	script += '\r\n%><%@ include file="lib.inc/header.jsp" %>\r\n';
+	script += templateBeforeContent(formData);
+	script += '\r\n<!-- content started here -->\r\n\r\n';
+	script += '<form name="insertform" id="insertform" action="" method="post">\r\n';
+	script += '<table class="responsive responsive-two-cols" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
+	
+	for(i in insertFields)
+	{
+		caption = getFieldValues(formData, 'caption_'+insertFields[i]);
+		inputEl = generateInputForInsert(formData, insertFields[i]);
+		script += '\t<tr>\r\n\t\t<td>'+caption+'</td>\r\n\t\t<td>'+inputEl+'</td>\r\n\t</tr>\r\n';
+	}
+	script += '</table>\r\n';
+	
+	script += '<table class="responsive responsive-two-cols responsive-button-area" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
+	script += '\t<tr>\r\n\t\t<td>&nbsp;</td>\r\n\t\t<td>\r\n';
+	script += '\t\t\t<input type="submit" class="btn btn-success" id="save" name="button_save" value="Save">\r\n';
+	script += '\t\t\t<input type="button" class="btn btn-primary" id="showall" value="Show All" onclick="window.location=\'<%= __self_name %>\'">\r\n';
+	script += '\t\t</td>\r\n\t</tr>\r\n';
+	script += '</table>\r\n';
+
+	script += '</form>\r\n';
+	
+	
+	script += '\r\n<!-- content ended here -->\r\n';
+	script += templateAfterContent(formData);
+	script += '\r\n<%@ include file="lib.inc/footer.jsp" %>';
+	// end if has permission
+	script += '<%\r\n}\r\n';
+	
+	script += 'else\r\n{\r\n%>';
+	script += '<%@ include file="lib.inc/header.jsp" %>\r\n';
+	script += templateBeforeContent(formData);
+	script += '\r\n<!-- content started here -->\r\n\r\n\t<div class="message-warning-permission"><%= error_message_permission %></div>\r\n';
+	script += '\r\n<!-- content ended here -->\r\n';
+	script += templateAfterContent(formData);
+	script += '\r\n<%@ include file="lib.inc/footer.jsp" %>';
+	// end else has permission
+	script += '<%\r\n}\r\n';
+
+	// end if insert
+	script += '}\r\n';
+	script += '%>';
+	return script;
+}
+function generateUpdateUI(formData)
+{
+	var updateFields = getUpdateFields(formData);
+	var i, j, k, inputEl, caption;
+	var script = '';
+	var field = '';
+	var currentTable = getFieldValues(formData, 'table')[0];
+	var pk = getPrimaryKey(formData);
+	var pkey = (pk.length)?pk[0]:updateFields[0];
+	var pkeyFilter = getSelectedFilterType(formData, pkey);
+	
+	script += '<%\r\nelse if(__action.equals("update"))\r\n{\r\n';
+	script += '// TODO: Here are your code for update UI\r\n';
+	script += 'if(hasPermission(__userLevel, __module_name, "update"))\r\n{\r\n';	
+	script += 'String __id = filterInput(request, "'+pkey+'", "'+pkeyFilter+'", true);\r\n';
+	script += 'JSONObject __result = null;\r\n\r\n';
+	
+	for(i in updateFields)
+	{
+		field = updateFields[i];
+		script += 'String d__'+field+' = "";\r\n';
+	}
+
+	script += '\r\n__query = "select \\"'+currentTable+'\\".* from \\"'+currentTable+'\\" where \\"'+pkey+'\\" = \'"+__id+"\'";\r\n';
+	script += '\r\ntry\r\n{\r\n';
+	script += 'db_rs = database.executeQuery(__query);\r\n';
+	script += 'if(db_rs.isBeforeFirst())\r\n{\r\n';
+	script += 'db_rs.next();\r\n';
+	for(i in updateFields)
+	{
+		field = updateFields[i];
+		script += 'd__'+field+' = db_rs.getString("'+field+'");\r\n';
+	}
+	
+	script += '\r\n%><%@ include file="lib.inc/header.jsp" %>\r\n';
+	script += templateBeforeContent(formData);
+	script += '\r\n<!-- content started here -->\r\n\r\n';
+	
+	
+	
+		
+	script += '<form name="editform" id="editform" action="" method="post">\r\n';
+	script += '<table class="responsive responsive-two-cols" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
+	
+	for(i in updateFields)
+	{
+		caption = getFieldValues(formData, 'caption_'+updateFields[i]);
+		inputEl = generateInputForUpdate(formData, updateFields[i]);
+		script += '\t<tr>\r\n\t\t<td>'+caption+'</td>\r\n\t\t<td>'+inputEl+'</td>\r\n\t</tr>\r\n';
+	}
+	script += '</table>\r\n';
+	
+	script += '<table class="responsive responsive-two-cols responsive-button-area" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
+	script += '\t<tr>\r\n\t\t<td>&nbsp;</td>\r\n\t\t<td>\r\n';
+	script += '\t\t\t<input type="submit" class="btn btn-success" id="save" name="button_save" value="Save">\r\n';
+	script += '\t\t\t<input type="button" class="btn btn-primary" id="showall" value="Show All" onclick="window.location=\'<%= __self_name %>\'">\r\n';
+	script += '\t\t</td>\r\n\t</tr>\r\n';
+	script += '</table>\r\n';
+
+	script += '</form>\r\n';
+
+	script += '\r\n<!-- content ended here -->\r\n';
+	script += templateAfterContent(formData);
+	script += '\r\n<%@ include file="lib.inc/footer.jsp" %>';
+	script += '<%\r\n}\r\nelse\r\n{\r\n';
+	
+	script += '%>\r\n<%@ include file="lib.inc/header.jsp" %>\r\n';
+	script += templateBeforeContent(formData);
+	script += '\t<div class="message-not-found"><%= pagination_data_not_found %></div>\r\n';
+	script += templateAfterContent(formData);
+	script += '<%@ include file="lib.inc/footer.jsp" %>';
+	script += '\r\n<%';
+
+	script += '\r\n}\r\n%>';
+	// end if has permission
+	script += '<%\r\n}\r\ncatch(Exception e)\r\n{\r\n';
+	script += '// Catch\r\n';
+	script += '}\r\nfinally\r\n{\r\n';
+	script += '// Finnaly\r\n';
+	script += '}\r\n%>\r\n';
+	script += '<%\r\n}\r\n';
+	
+	script += 'else\r\n{\r\n%>';
+	script += '<%@ include file="lib.inc/header.jsp" %>\r\n';
+	script += templateBeforeContent(formData);
+	script += '\r\n<!-- content started here -->\r\n\r\n\t<div class="message-warning-permission"><%= error_message_permission %></div>\r\n';
+	script += '\r\n<!-- content ended here -->\r\n';
+	script += templateAfterContent(formData);
+	script += '\r\n<%@ include file="lib.inc/footer.jsp" %>';
+	// end else has permission
+	script += '<%\r\n}\r\n';
+
+	// end if insert
+	script += '}\r\n';
+	script += '%>';
+	return script;
+}
+function generateDetailUI(formData)
+{
+	var detailFields = getDetailFields(formData);
+	var i, j, k, inputEl, caption, subselectArray = [];
+	var elementType = '', subselectStr = '', table = '';
+	var script = '';
+	var field = '';
+	var currentTable = getFieldValues(formData, 'table')[0];
+	var pk = getPrimaryKey(formData);
+	var pkey = (pk.length)?pk[0]:detailFields[0];
+	var pkeyFilter = getSelectedFilterType(formData, pkey);
+	var cellVal = "";
+	var cellType = "";
+
+	script += '<%\r\nelse if(__action.equals("detail"))\r\n{\r\n';
+	script += '// TODO: Here are your code for detail UI\r\n';
+	script += 'if(hasPermission(__userLevel, __module_name, "detail"))\r\n{\r\n';	
+	script += 'String __id = filterInput(request, "'+pkey+'", "'+pkeyFilter+'", true);\r\n';
+	script += 'JSONObject __result = null;\r\n\r\n';
+	
+	var tableFieldsArray = [];
+	var tableFields = '';
+	
+	for(i in detailFields)
+	{
+		field = detailFields[i];
+		script += 'String d__'+field+' = "";\r\n';
+		
+		elementType = getSelectedElementType(formData, field);
+		if(elementType == 'select')
+		{
+			table = field;
+			if(table.length > 3)
+			{
+				table = table.substr(0, table.length-3);
+			}
+			subselectStr = '(select \\"'+table+'\\".\\"name\\" from \\"'+table+'\\" where \\"'+table+'\\".\\"'+field+'\\" = \\"'+currentTable+'\\".\\"'+field+'\\") as \\"'+field+'\\"';
+			subselectArray.push(subselectStr);
+		}
+		else
+		{
+			tableFieldsArray.push('\\"'+currentTable+'\\".\\"'+field+'\\"');
+		}
+	}
+	if(subselectArray.length)
+	{
+		subselectStr = ', "+\r\n"'+subselectArray.join(', "+\r\n"')+' "+\r\n"'
+	}
+	else
+	{
+		subselectStr = ' '; 
+	}
+	tableFields = tableFieldsArray.join(', ');
+	script += '\r\n__query = "select '+tableFields+''+subselectStr+'from \\"'+currentTable+'\\" where \\"'+pkey+'\\" = \'"+__id+"\'";\r\n';
+	script += '\r\ntry\r\n{\r\n';
+	script += '\r\ndb_rs = database.executeQuery(__query);\r\n';
+	script += 'if(db_rs.isBeforeFirst())\r\n{\r\n';
+	script += 'db_rs.next();\r\n';
+	
+	for(i in detailFields)
+	{
+		field = detailFields[i];
+		script += 'd__'+field+' = db_rs.getString("'+field+'");\r\n';
+	}
+	
+	script += '\r\n%><%@ include file="lib.inc/header.jsp" %>\r\n';
+	script += templateBeforeContent(formData);
+	script += '\r\n<!-- content started here -->\r\n\r\n';
+	script += '<form name="detailform" id="detailform" action="" method="post">\r\n';
+	script += '<table class="responsive responsive-two-cols" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
+	
+	for(i in detailFields)
+	{
+		caption = getFieldValues(formData, 'caption_'+detailFields[i]);
+		cellType = getSelectedElementType(formData, detailFields[i]);
+		if(cellType == 'checkbox')
+		{
+			cellVal = '(d__'+detailFields[i]+' == null)?"No":((d__'+detailFields[i]+'.equals("1"))?"Yes":"No")';
+		}
+		else
+		{
+			cellVal = 'd__'+detailFields[i];
+		}
+		script += '\t<tr>\r\n\t\t<td>'+caption+'</td>\r\n\t\t<td><%= '+cellVal+' %></td>\r\n\t</tr>\r\n';
+	}
+	script += '</table>\r\n';
+	
+	script += '<table class="responsive responsive-two-cols responsive-button-area" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
+	script += '\t<tr>\r\n\t\t<td>&nbsp;</td>\r\n\t\t<td>\r\n';
+	script += '\t\t\t<input type="button" class="btn btn-success" id="edit" name="button_edit" value="Edit" onclick="window.location=\'<%= __self_name %>?user_action=update&'+pkey+'=<%= __id %>\'">\r\n';
+	script += '\t\t\t<input type="button" class="btn btn-primary" id="showall" value="Show All" onclick="window.location=\'<%= __self_name %>\'">\r\n';
+	script += '\t\t</td>\r\n\t</tr>\r\n';
+	script += '</table>\r\n';
+
+	script += '</form>\r\n';
+
+	script += '\r\n<!-- content ended here -->\r\n';
+	script += templateAfterContent(formData);
+	script += '\r\n<%@ include file="lib.inc/footer.jsp" %>';
+	script += '<%\r\n}\r\nelse\r\n{\r\n';
+	
+	script += '%>\r\n<%@ include file="lib.inc/header.jsp" %>\r\n';
+	script += templateBeforeContent(formData);
+	script += '\t<div class="message-not-found"><%= pagination_data_not_found %></div>\r\n';
+	script += templateAfterContent(formData);
+	script += '<%@ include file="lib.inc/footer.jsp" %>';
+	script += '\r\n<%';
+
+	script += '\r\n}\r\n%>';
+	// end if has permission
+	script += '<%\r\n}\r\ncatch(Exception e)\r\n{\r\n';
+	script += '// Catch\r\n';
+	script += '}\r\nfinally\r\n{\r\n';
+	script += '// Finnaly\r\n';
+	script += '}\r\n%>\r\n';
+	script += '<%\r\n}\r\n';
+	
+	script += 'else\r\n{\r\n%>';
+	script += '<%@ include file="lib.inc/header.jsp" %>\r\n';
+	script += templateBeforeContent(formData);
+	script += '\r\n<!-- content started here -->\r\n\r\n\t<div class="message-warning-permission"><%= error_message_permission %></div>\r\n';
+	script += '\r\n<!-- content ended here -->\r\n';
+	script += templateAfterContent(formData);
+	script += '\r\n<%@ include file="lib.inc/footer.jsp" %>';
+	// end else has permission
+	script += '<%\r\n}\r\n';
+
+	// end if insert
+	script += '}\r\n';
+	script += '%>';
+	return script;
+}
+function generateListUI(formData)
+{
+	var listFields = getListFields(formData);
+	var i, j, k, inputEl, caption, subselectArray = [];
+	var elementType = '', subselectStr = '', table = '';
+	var script = '';
+	var field = '';
+	var currentTable = getFieldValues(formData, 'table')[0];
+	var pk = getPrimaryKey(formData);
+	var pkey = (pk.length)?pk[0]:listFields[0];
+	var cellVal = "";
+	var cellType = "";
+
+	
+	var filters = generateListFilter(formData, currentTable);		
+
+	script += '<%\r\nelse\r\n{\r\n';
+	script += '// TODO: Here are your code for list UI\r\n';
+	script += 'if(hasPermission(__userLevel, __module_name, "list"))\r\n{\r\n';	
+	script += 'String __id = "";\r\n';
+	script += 'int int_n = 0;\r\n';
+	script += 'int int_no = 0;\r\n';
+	script += 'int __offset = Integer.parseInt(filterInput(request, "offset", "FILTER_SANITIZE_NUMBER_UINT", true));\r\n';
+	script += 'JSONObject __result = null;\r\n';
+	
+	script += 'String __q = filterInput(request, "q", "FILTER_SANITIZE_SPECIAL_CHARS", true);\r\n';
+	script += 'String __qNoEscape = filterInput(request, "q", "FILTER_SANITIZE_SPECIAL_CHARS", false);\r\n';
+	script += 'String __filterSort = "'+listFields.join('|')+'";\r\n';
+	script += 'String __orderByColumn = chooseOneFrom(__filterSort, filterInput(request, "orderby", "FILTER_SANITIZE_STRING", true), false);\r\n';  
+	script += 'String __orderMethod = chooseOneFrom("asc|desc",  filterInput(request, "ordermethod", "FILTER_SANITIZE_STRING", true), true);\r\n';  
+
+	script += '\r\n';
+
+	script += filters.variables;
+	script += filters.queries;
+	
+	var tableFieldsArray = [];
+	var tableFields = '';
+
+	
+	script += '\r\n';
+	for(i in listFields)
+	{
+		field = listFields[i];
+		script += 'String d__'+field+' = "";\r\n';
+		
+		elementType = getSelectedElementType(formData, field);
+		if(elementType == 'select')
+		{
+			table = field;
+			if(table.length > 3)
+			{
+				table = table.substr(0, table.length-3);
+			}
+			subselectStr = '(select \\"'+table+'\\".\\"name\\" from \\"'+table+'\\" where \\"'+table+'\\".\\"'+field+'\\" = \\"'+currentTable+'\\".\\"'+field+'\\") as \\"'+field+'\\"';
+			subselectArray.push(subselectStr);
+		}
+		else
+		{
+			tableFieldsArray.push('\\"'+currentTable+'\\".\\"'+field+'\\"');
+		}
+	}
+	if(subselectArray.length)
+	{
+		subselectStr = ', "+\r\n"'+subselectArray.join(', "+\r\n"')+' "+\r\n"'
+	}
+	else
+	{
+		subselectStr = ' '; 
+	}
+	
+	tableFields = tableFieldsArray.join(', ');
+
+	if(listFields.indexOf(pkey) == -1)
+	{
+		tableFields = '\\"'+currentTable+'\\".\\"'+pkey+'\\", '+tableFields;
+	}
+	
+	
+	script += '\r\n'; 
+	script += 'String sql__query = "";\r\n';
+	script += 'String sql__field = "'+tableFields+subselectStr+'";\r\n';
+	script += 'String sql__from = "\\"'+currentTable+'\\"";\r\n';  
+	script += 'String sql__where = "where (1=1)";\r\n';
+	script += 'String sql__orderBy = "order by \\""+__orderByColumn+"\\" "+__orderMethod;\r\n'; 
+	script += 'String sql__limit = "limit "+pagination_record_per_page+" offset "+__offset;\r\n';
+	script += '\r\n';
+	script += '// filter from search\r\n';
+	script += 'if(!sql__additional_filter.equals(""))\r\n';
+	script += '{\r\n';
+	script += '\tsql__where += sql__additional_filter;\r\n';
+	script += '}\r\n';
+	script += '\r\n';
+	script += '// add you additional filter here\r\n';  
+	script += '\r\n'; 
+				
+
+	script += '\r\npagination_max_record = database.getRowCount("select count(*) as \\"num\\" from "+sql__from+"\\r\\n"+sql__where);\r\n';
+	
+	script += '// build final query here\r\n';   
+	script += 'sql__query = "select "+sql__field+"\\r\\nfrom "+sql__from+"\\r\\n"+sql__where;\r\n'; 
+	script += 'if(!__orderByColumn.equals(""))\r\n'; 
+	script += '{\r\n'; 
+	script += '\tsql__query += "\\r\\n"+sql__orderBy;\r\n'; 
+	script += '}\r\n'; 
+	script += 'sql__query += "\\r\\n"+sql__limit;\r\n';   
+
+
+	script += '\r\n%><%@ include file="lib.inc/header.jsp" %>\r\n';
+	script += templateBeforeContent(formData);
+	script += '\r\n<!-- content started here -->\r\n\r\n';
+	script += '<'+'script type="text/javascript">\r\n'+
+				'$(document).ready(function(e){\r\n'+
+				'    createSortTable();\r\n'+
+				'    createPagination();\r\n'+
+				'});\r\n'+
+				'</'+'script'+'>\r\n';
+				
+				
+
+	script += '\r\<div class="search-bar">\r\n'+
+				'	<form name="searchform" id="searchform" method="get" action="">\r\n'+
+				'    	<!-- add some filters here -->\r\n'+
+//				'    	<span class="searchform-label">'+currentTable.replaceAll('_', ' ').capitalize().prettify()+'</span>\r\n'+
+				'        <span class="searchform-control">\r\n'+
+							filters.elements+				
+				((filters.elements.length > 10)?'        	<input type="submit" class="btn btn-success" value="Search">\r\n':'')+
+				'        	<input type="button" class="btn btn-primary" value="Add" onclick="window.location=\'<%= __self_name %>?user_action=insert\'">\r\n'+
+				'        </span>\r\n'+
+				'    </form>\r\n'+
+				'</div>\r\n';
+
+	script += '<%\r\n'+
+				'try\r\n'+
+				'{\r\n'+
+				'db_rs = database.executeQuery(sql__query);\r\n'+
+				'if(db_rs.isBeforeFirst())\r\n'+
+				'{\r\n'+
+				'%>\r\n';
+	
+	script += '<form name="mainformdata" id="mainformdata" method="post" action="">\r\n';
+	script += '\r\n<div data-pagination="true" data-self-name="<%= __self_name %>" data-max-record="<%= pagination_max_record %>" data-record-per-page="<%= pagination_record_per_page %>"></div>\r\n\r\n';			
+	script += '<table class="table table-striped jambo_table" border="0" cellpadding="0" cellspacing="0" width="100%" data-table-sort="true" data-self-name="<%= __self_name %>">\r\n';
+	
+	script += '\t<thead>\r\n';
+	script += '\t\t<tr>\r\n';
+
+	script += '\t\t\t<td width="16" align="center"><input type="checkbox" class="checkbox-select-all" data-selector=".checkbox-'+pkey+'" value="1"></td>\r\n';
+	script += '\t\t\t<td width="16" align="center"><span class="fa fa-edit"></span></td>\r\n';
+	script += '\t\t\t<td width="16" align="center"><span class="fa fa-folder"></span></td>\r\n';
+	script += '\t\t\t<td width="25">No</td>\r\n';
+
+	
+	for(i in listFields)
+	{
+		caption = getFieldValues(formData, 'caption_'+listFields[i]);
+		script += '\t\t\t<td class="col-sort" data-col-name="'+listFields[i]+'"><a href="#">'+caption+'</a></td>\r\n';
+	}
+	
+	script += '\t\t</tr>\r\n';
+	script += '\t</thead>\r\n';
+	
+	script += '\t<tbody>\r\n';
+	script += '\t\t<%\r\n';
+	
+	script += '\t\twhile(db_rs.next())\r\n\t\t{\r\n';
+	script += '\t\t\tint_n++;\r\n';
+	script += '\t\t\tint_no = __offset + int_n;\r\n';
+	script += '\t\t\t__id = db_rs.getString("'+pkey+'");\r\n\r\n';
+	for(i in listFields)
+	{
+		field = listFields[i];
+		script += '\t\t\td__'+field+' = db_rs.getString("'+field+'");\r\n';
+	}
+	script += '\t\t%>\r\n';
+	
+	script += '\t\t<tr>\r\n';
+	script += '\t\t\t<td width="16" align="center"><input type="checkbox" class="checkbox-'+pkey+'" name="'+pkey+'" value="<%= __id %>"></td>\r\n';
+	script += '\t\t\t<td width="16" align="center"><a href="<%= __self_name %>?user_action=update&'+pkey+'=<%= __id %>" class="edit-control"><span class="fa fa-edit"></span></a></td>\r\n';
+	script += '\t\t\t<td width="16" align="center"><a href="<%= __self_name %>?user_action=detail&'+pkey+'=<%= __id %>" class="detail-control field-master"><span class="fa fa-folder"></span></a></td>\r\n';
+	script += '\t\t\t<td align="right"><%= int_no %></td>\r\n';
+	
+	for(i in listFields)
+	{
+		cellType = getSelectedElementType(formData, listFields[i]);
+		if(cellType == 'checkbox')
+		{
+			cellVal = '(d__'+listFields[i]+' == null)?"No":((d__'+listFields[i]+'.equals("1"))?"Yes":"No")';
+		}
+		else
+		{
+			cellVal = 'd__'+listFields[i];
+		}
+		
+		script += '\t\t\t<td><a class="field-slave"><%= '+cellVal+' %></a></td>\r\n';
+		//script += '\t\t\t<td><a href="<%= __self_name %>?user_action=detail&'+pkey+'=<%= __id %>"><%= '+cellVal+' %></a></td>\r\n';
+	}
+	script += '\t\t</tr>\r\n';
+	script += '\t\t<%\r\n';
+	script += '\t\t}\r\n';
+	script += '\t\t%>\r\n';
+	script += '\t</tbody>\r\n';
+	script += '</table>\r\n';
+	script += '\r\n<div data-pagination="true" data-self-name="<%= __self_name %>" data-max-record="<%= pagination_max_record %>" data-record-per-page="<%= pagination_record_per_page %>"></div>\r\n';
+	
+	script += '<div class="button-area">\r\n';
+	script += '\t<input type="submit" class="btn btn-success" name="data_activate" value="Activate">\r\n';
+	script += '\t<input type="submit" class="btn btn-warning" name="data_deactivate" value="Deactivate">\r\n';
+	script += '\t<input type="submit" class="btn btn-danger" name="data_delete" value="Delete" onclick="return confirm(\'<%= warning_message_delete %>\')">\r\n';
+	script += '</div>\r\n';
+	script += '</form>\r\n';
+	
+
+	script += '<%\r\n'+
+				'}\r\n'+
+				'else\r\n'+
+				'{\r\n'+
+				'%>\r\n'+
+				'\t<div class="message-not-found"><%= pagination_data_not_found %></div>\r\n'+
+				'<%\r\n'+
+				'}\r\n'+
+				'}\r\n'+
+				'catch(Exception e)\r\n'+
+				'{\r\n'+
+				'\te.printStackTrace();\r\n'+
+				'\t%>\r\n'+
+				'\t<div class="message-error-database"><%= error_message_fail_access_db %></div>\r\n'+
+				'\t<%\r\n'+
+				'}\r\n'+
+				'finally\r\n'+
+				'{\r\n'+
+				'}\r\n'+
+				'%>\r\n';
+				
+	script += '\r\n<!-- content ended here -->\r\n';
+	script += templateAfterContent(formData);
+	script += '\r\n<%@ include file="lib.inc/footer.jsp" %>';
+	// end if has permission
+	script += '<%\r\n}\r\n';
+	
+	script += 'else\r\n{\r\n%>';
+	script += '<%@ include file="lib.inc/header.jsp" %>\r\n';
+	script += templateBeforeContent(formData);
+	script += '\r\n<!-- content started here -->\r\n\r\n\t<div class="message-warning-permission"><%= error_message_permission %></div>\r\n';
+	script += '\r\n<!-- content ended here -->\r\n';
+	script += templateAfterContent(formData);
+	script += '\r\n<%@ include file="lib.inc/footer.jsp" %>';
+	// end else has permission
+	script += '<%\r\n}\r\n';
+
+	// end if insert
+	script += '}\r\n';
+	script += '%>';
+	return script;
+}
+function generateListFilter(formData, currentTable)
+{
+	var filters = getListFilter(formData);
+	var i, j, k, l, field, type, table;
+	var variables = '';
+	var elements = '';
+	var queries = '';
+	var filterQuery = '';
+	queries += 'String sql__additional_filter = "";\r\n\r\n';
+	for(i in filters)
+	{
+		field = filters[i].name;
+		table = field;
+		caption = getFieldValues(formData, 'caption_'+field);
+		if(table.length > 3)
+		{
+			table = table.substr(0, table.length-3);
+		}
+		type = filters[i].type;
+		variables += 'String s__'+field+' = filterInput(request, "'+field+'", "FILTER_SANITIZE_STRING", true);\r\n';
+		
+		elements += '\t\t\t<span class="searchform-label">'+caption+'</span>\r\n';
+		if(type == 'text')
+		{
+			elements += '\t\t\t<input type="text" class="input-text-search" name="'+field+'" id="'+field+'" value="<%= filterInput(request, "'+field+'", "FILTER_SANITIZE_STRING", false) %>">\r\n';
+			queries += 'if(!s__'+field+'.equals(""))\r\n{\r\n\tsql__additional_filter += " and \\"'+currentTable+'\\".\\"'+field+'\\" like \'%"+s__'+field+'+"%\' ";\r\n}\r\n';
+		}
+		else
+		{
+			elements += '\t\t\t<select class="select-search" name="'+field+'" id="'+field+'">\r\n\t\t\t\t<option value="">- Select One -</option>\r\n\t\t\t\t<%= database.createDropDownMenu("'+table+'", "'+field+'", "name", filterInput(request, "'+field+'", "FILTER_SANITIZE_STRING", false)) %>\r\n\t\t\t</select>\r\n';
+			queries += 'if(!s__'+field+'.equals(""))\r\n{\r\n\tsql__additional_filter += " and \\"'+currentTable+'\\".\\"'+field+'\\" = \'"+s__'+field+'+"\' ";\r\n}\r\n';
+		}
+	}
+	return {elements:elements, variables:variables, queries:queries};
+}
+function getListFilter(formData)
+{
+	var allFields = getFieldValues(formData, 'field');
+	var i, j, k, l = [], m;
+	for(i in allFields)
+	{
+		j = allFields[i];
+		k = getFieldValues(formData, 'list_filter_'+j);
+		if(typeof k[0] != 'undefined')
+		{
+			l.push({name:j, type:k});
+		}
+	}
+	return l;
+}
+function templateBeforeContent(formData)
+{
+	var template = '<div class="content-wrapper">\r\n';
+	return template;
+}
+function templateAfterContent(formData)
+{
+	var template = '</div>\r\n';
+	return template;
+}
+function generateInputForInsert(formData, field)
+{
+	var table = field;
+	if(table.length > 3)
+	{
+		table = table.substr(0, table.length-3);
+	}
+	var dataType = getSelectedDataType(formData, field);
+	var elementType = getSelectedElementType(formData, field);
+	var required = isInputRequired(formData, field);
+	var el = convertDataTypeToElement(elementType, dataType, required);
+	el.attr({'name':field, 'id':field});
+	if(elementType == 'select')
+	{
+		var sel = el[0].outerHTML;
+		sel = sel.replace('</select>', '\r\n\t\t\t\t<option value="">- Select One -</option>\r\n\t\t\t\t<%= database.createDropDownMenu("'+table+'", "'+field+'", "name") %>\r\n\t\t\t</select>');
+		return sel;
+	}
+	if(elementType == 'checkbox')
+	{
+		el.attr({'value':'1'});
+		var cb = el[0].outerHTML;
+		var label = '<label>'+cb+' '+field.replaceAll('_', ' ').capitalize().prettify()+'</label>';
+		return label;
+	}
+	
+	return el[0].outerHTML;
+}
+function generateInputForUpdate(formData, field)
+{
+	var table = field;
+	if(table.length > 3)
+	{
+		table = table.substr(0, table.length-3);
+	}
+	var dataType = getSelectedDataType(formData, field);
+	var elementType = getSelectedElementType(formData, field);
+	var required = isInputRequired(formData, field);
+	var el = convertDataTypeToElement(elementType, dataType, required);
+	el.attr({'name':field, 'id':field});
+	if(elementType == 'select')
+	{
+		var sel = el[0].outerHTML;
+		sel = sel.replace('</select>', '\r\n\t\t\t\t<option value="">- Select One -</option>\r\n\t\t\t\t<%= database.createDropDownMenu("'+table+'", "'+field+'", "name", d__'+field+') %>\r\n\t\t\t</select>');
+		return sel;
+	}
+	if(elementType == 'text')
+	{
+		var te = el[0].outerHTML;
+		te = te.replace('>', ' value="<%= d__'+field+' %>">');
+		return te;
+	}
+	if(elementType == 'textarea')
+	{
+		var ta = el[0].outerHTML;
+		ta = ta.replace('</textarea>', '<%= d__'+field+' %></textarea>');
+		return ta;
+	}
+	if(elementType == 'checkbox')
+	{
+		el.attr({'value':'1'});
+		var cb = el[0].outerHTML;
+		cb = cb.replace('>', '<%= (d__'+field+' == null)?"":((d__'+field+'.equals("1"))?" checked=\\"checked\\"":"") %>>');
+		var label = '<label>'+cb+' '+field.replaceAll('_', ' ').capitalize().prettify()+'</label>';
+		return label;
+	}
+	return el[0].outerHTML;
+}
+function getPrimaryKey(formData)
+{
+	var allFields = getFieldValues(formData, 'field');
+	var i, j, k, l = [], m;
+	for(i in allFields)
+	{
+		j = allFields[i];
+		k = getFieldValues(formData, 'include_key_'+j);
+		if(typeof k[0] != 'undefined')
+		{
+			l.push(j);
+		}
+	}
+	return l;
+}
+function getSelectedDataType(formData, field)
+{
+	var inputType = getFieldValues(formData, 'data_type_'+field);
+	return inputType[0] || 'text';
+}
+function getSelectedElementType(formData, field)
+{
+	var elementType = getFieldValues(formData, 'element_type_'+field);
+	return elementType[0] || 'text';
+}
+function isInputRequired(formData, field)
+{
+	var required = getFieldValues(formData, 'include_required_'+field) || [];
+	return (required.length)?true:false;
+}
+function convertDataTypeToElement(elementType, dataType, required)
+{
+	var el;
+	
+	switch(elementType)
+	{
+		case 'text':
+		el = $('<input />');
+		el.attr({'type':'text'});
+		break;
+		case 'textarea':
+		el = $('<textarea />');
+		el.addClass('form-control');
+		break;
+		case 'select':
+		el = $('<select />');
+		el.addClass('form-control');
+		break;
+		case 'checkbox':
+		el = $('<input />');
+		el.attr({'type':'checkbox'});
+		break;
+		case 'radio':
+		el = $('<input />');
+		el.attr({'type':'radio'});
+		break;
+		case 'enum':
+		el = $('<select />');
+		el.addClass('form-control');
+		break;
+		default:
+		el = $('<input />');
+		el.attr({'type':'text'});
+	}
+	
+	switch(dataType)
+	{
+		case 'text':
+		if(elementType == 'text')
+		el.attr({'type':'text', 'class':'form-control input-text input-text-plain'});
+		break;
+		
+		case 'email':
+		if(elementType == 'text')
+		el.attr({'type':'email', 'class':'form-control input-text input-text-email'});
+		break;
+		
+		case 'password':
+		if(elementType == 'text')
+		el.attr({'type':'password', 'class':'form-control input-text input-text-password'});
+		break;
+		
+		case 'int':
+		if(elementType == 'text')
+		el.attr({'type':'number', 'class':'form-control input-text input-text-plain'});
+		break;
+		
+		case 'float':
+		if(elementType == 'text')
+		el.attr({'type':'number', 'step':'any', 'class':'form-control input-text input-text-plain'});
+		break;
+		
+		case 'time':
+		if(elementType == 'text')
+		el.attr({'type':'text', 'class':'form-control timepicker input-text input-text-time'});
+		break;
+		
+		case 'datetime':
+		if(elementType == 'text')
+		el.attr({'type':'text', 'class':'form-control datetimepicker input-text input-text-datetime'});
+		break;
+		
+		case 'date':
+		if(elementType == 'text')
+		el.attr({'type':'text', 'class':'form-control datepicker input-text input-text-date'});
+		break;
+		
+		case 'color':
+		if(elementType == 'text')
+		el.attr({'type':'text', 'class':'form-control colorpicker-element input-text input-text-color'});
+		break;
+		
+		case 'tel':
+		if(elementType == 'text')
+		el.attr({'type':'tel', 'class':'form-control input-text input-text-tel'});
+		break;
+		
+		default:
+		if(elementType == 'text')
+		el.attr({'type':'text', 'class':'form-control input-text input-text-plain'});
+		break;
+	}
+	if(required)
+	{
+		el.attr({'required':'required'});
+	}
+	return el;
+}
+function getFieldValues(formData, field)
+{
+	var i, j, k = [];
+	for(i in formData)
+	{
+		j = formData[i];
+		if(j.name == field)
+		{
+			k.push(j.value);
+		}
+	}
+	return k;
+}
+function getInsertFields(formData)
+{
+	var allFields = getFieldValues(formData, 'field');
+	var i, j, k, l = [], m;
+	for(i in allFields)
+	{
+		j = allFields[i];
+		k = getFieldValues(formData, 'include_insert_'+j);
+		if(typeof k[0] != 'undefined')
+		{
+			l.push(j);
+		}
+	}
+	return l;
+}
+function getUpdateFields(formData)
+{
+	var allFields = getFieldValues(formData, 'field');
+	var i, j, k, l = [], m;
+	for(i in allFields)
+	{
+		j = allFields[i];
+		k = getFieldValues(formData, 'include_edit_'+j);
+		if(typeof k[0] != 'undefined')
+		{
+			l.push(j);
+		}
+	}
+	return l;
+}
+function getDetailFields(formData)
+{
+	var allFields = getFieldValues(formData, 'field');
+	var i, j, k, l = [], m;
+	for(i in allFields)
+	{
+		j = allFields[i];
+		k = getFieldValues(formData, 'include_detail_'+j);
+		if(typeof k[0] != 'undefined')
+		{
+			l.push(j);
+		}
+	}
+	return l;
+}
+function getListFields(formData)
+{
+	var allFields = getFieldValues(formData, 'field');
+	var i, j, k, l = [], m;
+	for(i in allFields)
+	{
+		j = allFields[i];
+		k = getFieldValues(formData, 'include_list_'+j);
+		if(typeof k[0] != 'undefined')
+		{
+			l.push(j);
+		}
+	}
+	return l;
+}
+
+function getSelectedFilterType(formData, field)
+{
+	var filterType = $('select[name="filter_type_'+field+'"]').val();
+	return filterType;
+}
+function getSelectedDataTypeForServer(formData, field)
+{
+	var dataType = "String";
+	var fieldType = $('select[name="data_type_'+field+'"]').val();
+	switch(fieldType)
+	{
+		case "text": 
+		dataType = "String"
+		break;
+		case "email": 
+		dataType = "String"
+		break;
+		case "password": 
+		dataType = "String"
+		break;
+		case "int":
+		dataType = "int"
+		break;
+		case "float":
+		dataType = "double"
+		break;
+		case "date":
+		dataType = "String"
+		break;
+		case "time":
+		dataType = "String"
+		break;
+		case "datetime":
+		dataType = "String"
+		break;
+		case "color":
+		dataType = "String"
+		break;
+		case "tel":
+		dataType = "String"
+		break;
+		default:
+		dataType = "String"
+		break;
+	}
+	return dataType;
+}
+
+function loadJSONFromServer(selector, url, host, port, username, password, database, table)
+{
+	$(selector).empty();
+	$.ajax({
+		url:url,
+		data:{host:host, port:port, username:username, password:password, database:database, table:table},
+		type:"GET",
+		dataType:"JSON",
+		success: function(data)
+		{
+			var i;
+			var field, args;
+			var DOMHTML;
+			for(i in data)
+			{
+				field = data[i].column_name;
+				args = {type:data[i].data_type};
+				DOMHTML = generateRow(field, args);
+				$(selector).append(DOMHTML);
+			}
+		}
+	});
+}
+function generateSelectFilter(field, args)
+{
+	var virtualDOM;
+	
+	args = args || {};
+	args.type = args.type || 'text';
+	var dataType = args.type;
+	var matchByType = {
+		'FILTER_SANITIZE_NUMBER_INT':['bit', 'varbit', 'smallint', 'int', 'integer', 'bigint', 'smallserial', 'serial', 'bigserial', 'bool', 'boolean'],
+		'FILTER_SANITIZE_NUMBER_FLOAT':['numeric', 'double', 'real', 'money'],
+		'FILTER_SANITIZE_SPECIAL_CHARS':['char', 'character', 'varchar', 'character varying', 'text', 'date', 'timestamp', 'time']
+	}
+	
+	virtualDOM = $(
+	'<select name="filter_type_'+field+'" id="filter_type_'+field+'">\r\n'+
+		'<option value="FILTER_SANITIZE_NUMBER_INT">NUMBER_INT</option>\r\n'+
+		'<option value="FILTER_SANITIZE_NUMBER_UINT">NUMBER_UINT</option>\r\n'+
+		'<option value="FILTER_SANITIZE_NUMBER_OCTAL">NUMBER_OCTAL</option>\r\n'+
+		'<option value="FILTER_SANITIZE_NUMBER_HEXADECIMAL">NUMBER_HEXADECIMAL</option>\r\n'+
+		'<option value="FILTER_SANITIZE_NUMBER_FLOAT">NUMBER_FLOAT</option>\r\n'+
+		'<option value="FILTER_SANITIZE_STRING">STRING</option>\r\n'+
+		'<option value="FILTER_SANITIZE_STRING_INLINE">STRING_INLINE</option>\r\n'+
+		'<option value="FILTER_SANITIZE_NO_DOUBLE_SPACE">NO_DOUBLE_SPACE</option>\r\n'+
+		'<option value="FILTER_SANITIZE_STRIPPED">STRIPPED</option>\r\n'+
+		'<option value="FILTER_SANITIZE_SPECIAL_CHARS">SPECIAL_CHARS</option>\r\n'+
+		'<option value="FILTER_SANITIZE_ALPHA">ALPHA</option>\r\n'+
+		'<option value="FILTER_SANITIZE_ALPHANUMERIC">ALPHANUMERIC</option>\r\n'+
+		'<option value="FILTER_SANITIZE_ALPHANUMERICPUNC">ALPHANUMERICPUNC</option>\r\n'+
+		'<option value="FILTER_SANITIZE_STRING_BASE64">STRING_BASE64</option>\r\n'+
+		'<option value="FILTER_SANITIZE_EMAIL">EMAIL</option>\r\n'+
+		'<option value="FILTER_SANITIZE_URL">URL</option>\r\n'+
+		'<option value="FILTER_SANITIZE_IP">IP</option>\r\n'+
+		'<option value="FILTER_SANITIZE_ENCODED">ENCODED</option>\r\n'+
+		'<option value="FILTER_SANITIZE_COLOR">COLOR</option>\r\n'+
+		'<option value="FILTER_SANITIZE_MAGIC_QUOTES">MAGIC_QUOTES</option>\r\n'+
+		'<option value="FILTER_SANITIZE_PASSWORD">PASSWORD</option>\r\n'+
+	'</select>\r\n'
+	);
+	
+	var i, j, k, l;
+	var filterType = 'FILTER_SANITIZE_SPECIAL_CHARS';
+	var found = false;
+	for(i in matchByType)
+	{
+		j = matchByType[i];
+		for(k in j)
+		{
+			if(dataType.indexOf(j[k]) != -1)
+			{
+				filterType = i;
+				found = true;
+				break;
+			}
+		}
+		if(found)
+		{
+			break;
+		}
+	}
+	virtualDOM.find('option').each(function(index, element) {
+        $(this).removeAttr('selected');
+    });
+	virtualDOM.find('option[value="'+filterType+'"]').attr('selected', 'selected');
+	return virtualDOM[0].outerHTML;
+
+}
+
+
+function generateSelectType(field, args)
+{
+	var virtualDOM;
+	
+	args = args || {};
+	args.type = args.type || 'text';
+	var dataType = args.type;
+	var matchByType = {
+		'int':['bit', 'varbit', 'smallint', 'int', 'integer', 'bigint', 'smallserial', 'serial', 'bigserial', 'bool', 'boolean'],
+		'float':['numeric', 'double', 'real', 'money'],
+		'text':['char', 'character', 'varchar', 'character varying', 'text'],
+		'date':['date'],
+		'datetime':['datetime', 'timestamp'],
+		'time':['time']
+	}
+	
+	virtualDOM = $(
+	'<select name="data_type_'+field+'" id="data_type_'+field+'">\r\n'+
+		'<option value="text" title="&lt;input type=&quot;text&quot;&gt;">text</option>\r\n'+
+		'<option value="email" title="&lt;input type=&quot;email&quot;&gt;">email</option>\r\n'+
+		'<option value="tel" title="&lt;input type=&quot;tel&quot;&gt;">tel</option>\r\n'+
+		'<option value="password" title="&lt;input type=&quot;password&quot;&gt;">password</option>\r\n'+
+		'<option value="int" title="&lt;input type=&quot;number&quot;&gt;">int</option>\r\n'+
+		'<option value="float" title="&lt;input type=&quot;number&quot; step=&quot;any&quot;&gt;">float</option>\r\n'+
+		'<option value="date" title="&lt;input type=&quot;text&quot;&gt;">date</option>\r\n'+
+		'<option value="time" title="&lt;input type=&quot;text&quot;&gt;">time</option>\r\n'+
+		'<option value="datetime" title="&lt;input type=&quot;text&quot;&gt;">datetime</option>\r\n'+
+		'<option value="color" title="&lt;input type=&quot;text&quot;&gt;">color</option>\r\n'+
+	'</select>\r\n'
+	);
+	
+	var i, j, k, l;
+	var filterType = 'FILTER_SANITIZE_SPECIAL_CHARS';
+	var found = false;
+	for(i in matchByType)
+	{
+		j = matchByType[i];
+		for(k in j)
+		{
+			if(dataType.indexOf(j[k]) != -1)
+			{
+				filterType = i;
+				found = true;
+				break;
+			}
+		}
+		if(found)
+		{
+			break;
+		}
+	}
+	virtualDOM.find('option').each(function(index, element) {
+        $(this).removeAttr('selected');
+    });
+	virtualDOM.find('option[value="'+filterType+'"]').attr('selected', 'selected');
+	return virtualDOM[0].outerHTML;
+}
+
+function arrayUnique(arr1)
+{
+	var i;
+	var arr2 = [];
+	for(i = 0; i < arr1.length; i++)
+	{
+		if(arr2.indexOf(arr1[i]) == -1)
+		{
+			arr2.push(arr1[i]);
+		}
+	}
+	return arr2;
+}
+
+
+String.prototype.replaceAll = function(str1, str2, ignore) 
+{
+    return this.replace(new RegExp(str1.replace(/([\/\,\!\\\^\$\{\}\[\]\(\)\.\*\+\?\|\<\>\-\&])/g,"\\$&"),(ignore?"gi":"g")),(typeof(str2)=="string")?str2.replace(/\$/g,"$$$$"):str2);
+};
+String.prototype.capitalize = function()
+{
+    return this.replace(/\w\S*/g, function(txt){
+		return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+	});
+}
+String.prototype.prettify = function()
+{
+	var i, j, k;
+	var str = this;
+	var arr = str.split(" ");
+	for(i in arr)
+	{
+		j = arr[i];
+		switch(j)
+		{
+			case "Id": arr[i] = "ID";
+			break;
+			case "Ip": arr[i] = "IP";
+			break;
+		}
+	}
+	return arr.join(" ");
+}
+
+function generateRow(field, args)
+{
+	var rowHTML =
+	'<tr>\r\n'+
+	'  <td>'+field+'<input type="hidden" name="field" value="'+field+'"></td>\r\n'+
+	'  <td><input type="text" name="caption_'+field+'" value="'+field.replaceAll("_", " ").capitalize().prettify()+'" autocomplete="off" spellcheck="false"></td>\r\n'+
+	'  <td align="center"><input type="checkbox" name="include_insert_'+field+'" value="1" checked="checked"></td>\r\n'+
+	'  <td align="center"><input type="checkbox" name="include_edit_'+field+'" value="1" checked="checked"></td>\r\n'+
+	'  <td align="center"><input type="checkbox" name="include_detail_'+field+'" value="1" checked="checked"></td>\r\n'+
+	'  <td align="center"><input type="checkbox" name="include_list_'+field+'" value="1" checked="checked"></td>\r\n'+
+	'  <td align="center"><input type="checkbox" name="include_key_'+field+'" value="1"></td>\r\n'+
+	'  <td align="center"><input type="checkbox" name="include_required_'+field+'" value="1"></td>\r\n'+
+	'  <td align="center"><input type="radio" name="element_type_'+field+'" value="text" checked="checked"></td>\r\n'+
+	'  <td align="center"><input type="radio" name="element_type_'+field+'" value="textarea"></td>\r\n'+
+	'  <td align="center"><input type="radio" name="element_type_'+field+'" value="select"></td>\r\n'+
+	'  <td align="center"><input type="radio" name="element_type_'+field+'" value="checkbox"></td>\r\n'+
+	'  <td align="center"><input type="checkbox" name="list_filter_'+field+'" value="text" class="list_filter"></td>\r\n'+
+	'  <td align="center"><input type="checkbox" name="list_filter_'+field+'" value="select" class="list_filter"></td>\r\n'+
+	'  <td>\r\n'+
+	generateSelectType(field, args)+
+	'  </td>\r\n'+
+	'  <td>\r\n'+
+	generateSelectFilter(field, args)+
+	'  </td>\r\n'+
+	'</tr>\r\n';
+	return rowHTML;
+}
+
+</script>
+</head>
+
+<body>
+
+<div class="all">
+<div class="tabs">
+	<ul>
+    	<li><a href="#config">Database</a></li>
+    	<li><a href="#define">Define</a></li>
+    	<li><a href="#result">Result</a></li>
+    	<li><a href="#docs">Docs</a></li>
+    </ul>
+    
+    <div id="config">
+        <form name="formdatabase" id="formdatabase" method="post" action="" class="config-table">
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                    <td width="120">Host</td>
+                    <td><input type="text" name="host" id="host"></td>
+                </tr>
+                <tr>
+                    <td>Port</td>
+                    <td><input type="text" name="port" id="port"></td>
+                </tr>
+                <tr>
+                    <td>Username</td>
+                    <td><input type="text" name="username" id="username"></td>
+                </tr>
+                <tr>
+                    <td>Password</td>
+                    <td><input name="password" type="password" id="password" value=""></td>
+                </tr>
+                <tr>
+                    <td>Database</td>
+                    <td><input type="text" name="database" id="database"></td>
+                </tr>
+                <tr>
+                    <td>Table</td>
+                    <td><input type="text" name="table" id="table"> <input type="button" name="load_table" id="load_table" value="Load Tables"></td>
+                </tr>
+                <tr>
+                    <td>Quote</td>
+                    <td><label><input type="checkbox" name="quote" id="quote"> Quote table and column</label></td>
+                </tr>
+                <tr>
+                    <td>&nbsp;</td>
+                    <td><input type="button" name="load_structure" id="load_structure" value="Load Structure"></td>
+                </tr>
+            </table>
+        </form>
+    </div>
+    <div id="define">
+		<div class="define-wrapper">
+        <div class="database-info">
+        <span class="info-cell">Host: <span class="label-for-host"></span></span><span class="info-cell">Database: <span class="label-for-database"></span></span><span class="info-cell">Table: <span class="label-for-table"></span></span>
+        </div>
+      <form name="formgenerator" id="formgenerator" method="post" action="">
+          <table width="100%" border="1" cellspacing="0" cellpadding="0" class="main-table">
+            <thead>
+                <tr>
+                  <td rowspan="2" align="center">Field</td>
+                  <td rowspan="2" align="center">Caption</td>
+                  <td rowspan="2" align="center" width="32" title="Insert">I</td>
+                  <td rowspan="2" align="center" width="32" title="Update">U</td>
+                  <td rowspan="2" align="center" width="32" title="Detail">D</td>
+                  <td rowspan="2" align="center" width="32" title="List">L</td>
+                  <td rowspan="2" align="center" width="32" title="Key">K</td>
+                  <td rowspan="2" align="center" width="32" title="Required">R</td>
+                  <td colspan="4" align="center">Element Type</td>
+                  <td width="60" colspan="2" align="center">Search</td>
+                  <td rowspan="2" width="100" align="center">Data Type</td>
+                  <td rowspan="2" width="180" align="center">Filter Type</td>
+                </tr>
+                <tr>
+                  <td align="center" width="32" title="Input Text">TE</td>
+                  <td align="center" width="32" title="Textarea">TA</td>
+                  <td align="center" width="32" title="Select">SE</td>
+                  <td align="center" width="32" title="Checkbox">CB</td>
+                  <td width="30" align="center">TE</td>
+                  <td width="30" align="center">SE</td>
+                </tr>
+            </thead>
+          
+            <tbody>
+            
+            
+            </tbody>
+          </table>
+          <div class="button-area">
+          	<input type="hidden" name="table" value="">
+          	<input type="submit" name="generate" id="generate" value="Generate Script">
+          </div>
+      </form>
+      </div>
+    
+
+    </div>
+    <div id="result">
+    	<div class="code-area">
+       	<textarea class="text-code" id="text-code" spellcheck="false"></textarea>
+        </div>
+    </div>
+    <div id="docs">
+    	<div class="desc">
+	  <h3>Column Description</h3>
+        <ol>
+          <li><strong>Field</strong><br />
+            Field is the column name of the table
+          </li>
+          <li><strong>Caption</strong><br />
+            Caption is label of associated column
+          </li>
+          <li><strong>I</strong><br />
+            If the field will included on &quot;insert&quot; section, please check this
+          </li>
+          <li><strong>U</strong><br />
+          If the field will included on &quot;update&quot; section, please check this  </li>
+          <li><strong>D</strong><br />
+          If the field will included on &quot;detail&quot; section, please check this  </li>
+          <li><strong>L</strong><br />
+          If the field will included on &quot;list&quot; section, please check this  </li>
+          <li><strong>K</strong><br />
+            Is the field is primary key of the table, please check this. Each modul must have one key for control data
+          </li>
+          <li><strong>R</strong><br />
+            If input is mandatory to filed, please check this
+          </li>
+          <li><strong>TE</strong><br />
+          Input type is &lt;input type=&quot;text&quot;&gt;, &lt;input type=&quot;email&quot;&gt;, &lt;input type=&quot;tel&quot;&gt;, &lt;input type=&quot;password&quot;&gt;, &lt;input type=&quot;number&quot;&gt;, or &lt;input type=&quot;number&quot; step=&quot;any&quot;&gt; according to data type</li>
+          <li><strong>TA</strong><br />
+            Input type is &lt;textarea&gt;&lt;/textarea&gt;
+          </li>
+          <li><strong>SE</strong><br />
+            Input type is &lt;select&gt;&lt;option value&quot;&quot;&gt;&lt;/option&gt;&lt;/select&gt;
+          </li>
+          <li><strong>CB</strong><br />
+            Input type is &lt;input type=&quot;checkbox&quot;&gt;
+          </li>
+          <li><strong>Data Type</strong><br />
+            Data type for &lt;input&gt;
+          </li>
+          <li><strong>Filter Type</strong><br />
+          Filter type for input sent to server</li>
+        </ol>
+        <p>&lt;input type=&quot;date&quot;&gt;, &lt;input type=&quot;datetime&quot;&gt;, &lt;input type=&quot;time&quot;&gt; and &lt;input type=&quot;color&quot;&gt; are not applied on this generator because not all browsers support these input type. You can use JavaScript library for its.</p>
+		</div>
+    </div>
+    
+</div>
+</div>
+</body>
+</html>
