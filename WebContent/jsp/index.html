@@ -13,6 +13,7 @@
 <link rel="stylesheet" type="text/css" href="../js/cm/lib/codemirror.css">
 <script src="../js/cm/lib/codemirror.js" type="text/javascript"></script>
 <script src="../js/cm/mode/clike/clike.js" type="text/javascript"></script>
+<script src="../js/cm/mode/sql/sql.js" type="text/javascript"></script>
 <style type="text/css">
 body{
 	font-family:Arial, Helvetica, sans-serif;
@@ -117,11 +118,15 @@ input[type="button"], input[type="reset"], input[type="submit"], button{
 .desc{
 	line-height:1.5;
 }
+.reserved .field-name{
+	color:#bf0101;
+}
 </style>
 
 <script type="text/javascript">
 var initielized = false;
 var editor = null;
+var editor2 = null;
 function initCodeMirror()
 {
 	if(!initielized)
@@ -132,9 +137,18 @@ function initCodeMirror()
 			matchBrackets: true,
 			mode: "text/x-csrc"
 		});
+		editor2 = CodeMirror.fromTextArea(document.getElementById("sql-from-server"), {
+			mode: "text/x-pgsql",
+			indentWithTabs: true,
+			smartIndent: true,
+			lineNumbers: true,
+			matchBrackets : true
+		});
 		initielized = true;
 	}
 }
+
+// sql-from-server
 $(document).ready(function(e) {
     $('.tabs').tabs();
 
@@ -144,12 +158,15 @@ $(document).ready(function(e) {
 		$('.tabs').find(' > ul > li > a[href="#result"]').click();
 		var formData = $(this).serializeArray(); 
 		var script = "";
+		
+		var args = {withApproval:$('#with_approval')[0].checked, withTrash:$('#with_trash')[0].checked};
+		
 		script += generateAuthentification(formData);
-		script += generateController(formData);
-		script += generateInsertUI(formData);
-		script += generateUpdateUI(formData);
-		script += generateDetailUI(formData);
-		script += generateListUI(formData);
+		script += generateController(formData, args);
+		script += generateInsertUI(formData, args);
+		script += generateUpdateUI(formData, args);
+		script += generateDetailUI(formData, args);
+		script += generateListUI(formData, args);
 		
 		if($('#quote')[0].checked)
 		{
@@ -162,6 +179,7 @@ $(document).ready(function(e) {
 		initCodeMirror();
 		
 		editor.getDoc().setValue(script);
+		editor2.getDoc().setValue(SQLFromServer);
 		e.preventDefault();
 	});
 	$(document).on('click', '#load_table', function(e){
@@ -209,8 +227,32 @@ $(document).ready(function(e) {
 		$('.define-wrapper').css({display:"block"});
 		$('.tabs').find(' > ul > li > a[href="#define"]').click(); 
 		$('#formgenerator input[name="table"]').val(table);
+		
+		setTimeout(function(){
+			var isKW1 = isKeyWord(table);
+			var isKW2 = ($(selector).find('.reserved').length > 0);
+			if(isKW1 || isKW2)
+			{
+				$('#quote').attr('data-reserved', 'true');
+				$('#quote')[0].checked = true;
+			}
+			else
+			{
+				$('#quote').attr('data-reserved', 'false');
+			}
+		}, 1000);
+		
+		
 	});
-	$(document).on('change keyup blur', '#formdatabase input[type="text"]', function(e){
+	$(document).on('change', '#quote', function(e){
+		var chk = $('#quote')[0].checked;
+		if(!chk && $(this).attr('data-reserved') == 'true')
+		{
+			alert('This table contain PostgreSQL reserved word. You must quote table and field name.');
+			$('#quote')[0].checked = true;
+		}
+	});
+	$(document).on('change keyup blur', '#formdatabase input[type="text"], #formdatabase input[type="password"]', function(e){
 		var name = $(this).attr('name');
 		var value = $(this).val();
 		window.localStorage.setItem('sg_'+name, value);
@@ -256,10 +298,6 @@ function loadConfig()
 function finalizeString(script)
 {
 	script = script.replaceAll('\\"', '');
-	//script = script.replaceAll('jsp_tag_open_out', '<%=');
-	//script = script.replaceAll('jsp_tag_close_out', '%>');
-	//script = script.replaceAll('<%=="" (d__', '<%== ');
-	//script = script.replaceAll('?"="" checked="\&quot;checked\&quot;&quot;:&quot;&quot;" %>=""', '?" checked=\\"checked\\"":"" %>');
 	return script;
 }
 
@@ -269,8 +307,12 @@ function generateAuthentification(formData)
 	return script;
 }
 
-function generateController(formData)
+function generateController(formData, args)
 {
+	args = args || {};
+	args.withApproval = args.withApproval || false;
+	args.withTrash = args.withTrash || false;
+	
 	var i, j, k;
 	var fields = getFieldValues(formData, 'field');
 	var currentTable = getFieldValues(formData, 'table')[0];
@@ -339,6 +381,41 @@ function generateController(formData)
 	script += '\t__query = "insert into \\"'+currentTable+'\\" "+\r\n\t"(\\"' + insertFields.join('\\", \\"')+'\\") values " +\r\n\t"(\'\"+' + values.join('+"\', \'\"+')+'+"\');";\r\n';
 	script += '\tdb_rs = database.executeQuery(__query);\r\n';
 	script += '\tint newID = database.getLastID();\r\n';
+	
+	////////////////////////////////////////////////
+	/////////////// APPROVAL BEGIN /////////////////
+	////////////////////////////////////////////////
+	
+	if(args.withApproval)
+	{
+		var insertFieldsApv = insertFields;
+		var insertValuesApv = values;
+		if(insertFieldsApv.indexOf(pkey) == -1)
+		{
+			insertFieldsApv.push(pkey);
+			insertValuesApv.push('__pkey_value');
+		}
+
+		script += '\r\n';
+		script += '\t// Need approval';
+		script += '\r\n';
+		script += '\t__query = "insert into \\"'+currentTable+'_apv\\" "+\r\n\t"(\\"' + insertFields.join('\\", \\"')+'\\") values " +\r\n\t"(\'\"+' + insertValuesApv.join('+"\', \'\"+')+'+"\');";\r\n';
+		script += '\tdb_rs = database.executeQuery(__query);\r\n';
+		script += '\tint newApvID = database.getLastID();\r\n';
+		script += '\t__query = "update \\"'+currentTable+'_apv\\" set \\"admin_create_id\\" = \'"+__userID+"\', \\"time_create\\" = (now()::timestamp), \\"ip_create\\" = \'"+__remoteAddress+"\', \\"status_data\\" = \'1\', \\"status_approve\\" = \'0\', \\"'+pkey+'\\" = \'"+newID+"\' where \\"'+currentTable+'_apv_id\\" = \'"+newApvID+"\' ";\r\n';
+		script += '\tdb_rs = database.executeQuery(__query);\r\n';
+		script += '\t__query = "update \\"'+currentTable+'\\" set \\"'+currentTable+'_app_id\\" = \'"+newApvID+"\' where \\"'+pkey+'\\" = \'"+newID+"\'";\r\n';
+		script += '\tdb_rs = database.executeQuery(__query);\r\n';
+		script += '\t// Need approval';
+		script += '\r\n';
+		script += '\r\n';
+	}
+
+	////////////////////////////////////////////////
+	///////////////  APPROVAL END  /////////////////
+	////////////////////////////////////////////////
+	
+	
 	script += '\tresponse.sendRedirect(__self_name+"?user_action=detail&'+pkey+'="+newID);\r\n';
 	script += '}\r\n';
 	
@@ -360,15 +437,56 @@ function generateController(formData)
 	script += 'if(__action.equals("update") && !__save.equals("")) \r\n{\r\n';
 	script += 'if(hasPermission(__userLevel, __module_name, "update"))\r\n{\r\n';
 	script += '\t__pkey_value = filterInput(request, "'+pkey+'", "'+pkeyFilter+'", true);\r\n';
-	script += '\t__query = "update \\"'+currentTable+'\\" set "+\r\n';
-	var ss = [];
-	for(i in updateFields)
+
+
+	////////////////////////////////////////////////
+	/////////////// APPROVAL BEGIN /////////////////
+	////////////////////////////////////////////////
+
+	if(args.withApproval)
 	{
-		ss.push('\\"'+updateFields[i]+'\\" = \'"+r__'+updateFields[i]+'+"\'');
+		var updateFieldsApv = updateFields;
+		var updateValuesApv = values;
+		if(updateFieldsApv.indexOf(pkey) == -1)
+		{
+			updateFieldsApv.push(pkey);
+			updateValuesApv.push('__pkey_value');
+		}
+		
+		script += '\r\n';
+		script += '\t// Need approval';
+		script += '\r\n';
+		script += '\t__query = "insert into \\"'+currentTable+'_apv\\" "+\r\n\t"(\\"' + updateFieldsApv.join('\\", \\"')+'\\") values " +\r\n\t"(\'\"+' + updateValuesApv.join('+"\', \'\"+')+'+"\');";\r\n';
+		script += '\tdb_rs = database.executeQuery(__query);\r\n';
+				
+		script += '\tint newApvIDForEdit = database.getLastID();\r\n';
+		
+		script += '\t__query = "update \\"'+currentTable+'\\" set \\"'+currentTable+'_apv_id\\" = \'"+newApvIDForEdit+"\' where \\"'+pkey+'\\" = \'"+__pkey_value+"\' ";\r\n';
+		script += '\tdb_rs = database.executeQuery(__query);\r\n';
+		script += '\t__query = "update \\"'+currentTable+'_apv\\" set \\"admin_create_id\\" = \'"+__userID+"\', \\"time_create\\" = (now()::timestamp), \\"ip_create\\" = \'"+__remoteAddress+"\', \\"status_data\\" = \'0\', \\"status_approve\\" = \'0\', \\"'+pkey+'\\" = \'"+__pkey_value+"\' where \\"'+currentTable+'_apv_id\\" = \'"+newApvIDForEdit+"\' ";\r\n';
+		script += '\tdb_rs = database.executeQuery(__query);\r\n';
+		script += '\t// Need approval';
+		script += '\r\n';
+		script += '\r\n';
+
 	}
-	script += '\t"'+ss.join(', ')+'"+\r\n';
-	script += '\t"where \\"'+pkey+'\\" = \'"+__pkey_value+"\' ";\r\n';
-	script += '\tdb_rs = database.executeQuery(__query);\r\n';
+	else
+	{
+		var ss = [];
+		for(i in updateFields)
+		{
+			ss.push('\\"'+updateFields[i]+'\\" = \'"+r__'+updateFields[i]+'+"\'');
+		}
+		script += '\t__query = "update \\"'+currentTable+'\\" set "+\r\n';
+		script += '\t"'+ss.join(', ')+'"+\r\n';
+		script += '\t"where \\"'+pkey+'\\" = \'"+__pkey_value+"\' ";\r\n';
+		script += '\tdb_rs = database.executeQuery(__query);\r\n';
+	}
+	
+	////////////////////////////////////////////////
+	///////////////  APPROVAL END  /////////////////
+	////////////////////////////////////////////////
+
 	script += '\tresponse.sendRedirect(__self_name+"?user_action=detail&'+pkey+'="+__pkey_value);\r\n';
 	script += '}\r\n';
 	
@@ -433,7 +551,7 @@ function generateController(formData)
 	script += 'else\r\n{\r\n// TODO: add your code here when user does not have permission to update data\r\n\r\n}\r\n';
 	
 	script += '}\r\n';
-	script += '// [DEACTIVATE END]\r\n';
+	script += '// [ACTIVATE END]\r\n';
 
 	script += '\r\n\r\n';
 
@@ -448,6 +566,12 @@ function generateController(formData)
 	script += '\tfor(int_i = 0; int_i < delete_key_array.length; int_i++)\r\n'
 	script += '\t{\r\n';
 	script += '\t\tdatabase.deleteRecord("'+currentTable+'", "'+pkey+'", delete_key_array[int_i]);\r\n';
+	
+	if(args.withTrash)
+	{
+		script += '\t\tdatabase.updateTrashInfo("'+currentTable+'_trash", "'+pkey+'", delete_key_array[int_i], "'+currentTable+'_trash_id", __userID, __remoteAddress);\r\n';
+	}
+	
 	script += '\t}\r\n';
 	script += '\tresponse.sendRedirect(__self_name);\r\n';
 	script += '}\r\n';
@@ -463,14 +587,96 @@ function generateController(formData)
 	
 	script += '}\r\n';
 	script += '// [DELETE END]\r\n';
+	
+	
+	if(args.withApproval)
+	{
+		var columList = updateFields.join(",");	
+		script += '\r\n';
+		script += '\r\n';
+		script += '// [APPROVE BEGIN]\r\n'+
+		'if(!filterInput(request, "data_approve", "FILTER_SANITIZE_STRING", true).equals(""))\r\n'+
+		'{\r\n'+
+		'// TODO: Here are your code for approve\r\n'+
+		'if(hasPermission(__userLevel, __module_name, "approve"))\r\n'+
+		'{\r\n'+
+		'\t__pkey_value = filterInput(request, "'+pkey+'", "'+pkeyFilter+'", true);\r\n'+
+		'\tString __apv_id = database.getValue("'+currentTable+'", "'+pkey+'", __pkey_value, "'+currentTable+'_apv_id");\r\n'+
+		'\tif(!__apv_id.equals("0"))\r\n'+
+		'\t{\r\n'+
+		'\tString __status_data = database.getValue("'+currentTable+'_apv", "'+currentTable+'_apv_id", __apv_id, "status_data");\r\n'+
+		'\tif(__status_data.equals("1"))\r\n'+
+		'\t{\r\n'+
+		
+		'\t\tdatabase.setRecordValue("'+currentTable+'", "'+pkey+'", __pkey_value, "'+currentTable+'_apv_id", "0");\r\n'+
+		'\t\tdatabase.executeQuery("update \\"'+currentTable+'_apv\\" set \\"status_approve\\" = \'1\', \\"admin_approve_id\\" = \'"+__userID+"\', \\"ip_address_approve\\" = \'"+__remoteAddress+"\', \\"time_approve\\" = (now()::timestamp) where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'");\r\n'+
+		'\t\t// database.setRecordValue("'+currentTable+'_apv", "'+currentTable+'_apv_id", __apv_id, "status_approve", "1");\r\n'+				
+		'\t\t// database.executeQuery("update \\"'+currentTable+'\\" set \\"'+currentTable+'_apv_id\\" = \'0\' where \\"'+pkey+'\\" = \'"+__pkey_value+"\'");\r\n'+
+		'\t}\r\n'+
+		'\telse\r\n'+
+		'\t{\r\n'+
+		'\t\tdatabase.copyData("'+currentTable+'_apv", "'+currentTable+'", "'+columList+'", "'+currentTable+'_apv_id", __apv_id, "'+pkey+'", __pkey_value);\r\n'+
 
+		'\t\tdatabase.setRecordValue("'+currentTable+'", "'+pkey+'", __pkey_value, "'+currentTable+'_apv_id", "0");\r\n'+
+		'\t\tdatabase.executeQuery("update \\"'+currentTable+'_apv\\" set \\"status_approve\\" = \'1\', \\"admin_approve_id\\" = \'"+__userID+"\', \\"ip_address_approve\\" = \'"+__remoteAddress+"\', \\"time_approve\\" = (now()::timestamp) where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'");\r\n'+
+		'\t\t// database.setRecordValue("'+currentTable+'_apv", "'+currentTable+'_apv_id", __apv_id, "status_approve", "1");\r\n'+
+
+		'\t\t// database.executeQuery("update \\"'+currentTable+'\\" set \\"'+currentTable+'_apv_id\\" = \'0\' where \\"'+pkey+'\\" = \'"+__pkey_value+"\'");\r\n'+
+		'\t\t// database.executeQuery("update \\"'+currentTable+'_apv\\" set \\"status_approve\\" = \'1\' where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'");\r\n'+
+		'\t}\r\n'+
+		'\t}\r\n'+
+		'}\r\n'+
+		'}\r\n'+
+		'//[APPROVE END]\r\n'+
+		'\r\n'+
+		'\r\n'+
+		'// [REJECT BEGIN]\r\n'+
+		'if(!filterInput(request, "data_reject", "FILTER_SANITIZE_STRING", true).equals(""))\r\n'+
+		'{\r\n'+
+		'// TODO: Here are your code for approve\r\n'+
+		'if(hasPermission(__userLevel, __module_name, "approve"))\r\n'+
+		'{\r\n'+
+		'\t__pkey_value = filterInput(request, "'+pkey+'", "'+pkeyFilter+'", true);\r\n'+
+		'\tString __apv_id = database.getValue("'+currentTable+'", "'+pkey+'", __pkey_value, "'+currentTable+'_apv_id");\r\n'+
+		'\tif(!__apv_id.equals("0"))\r\n'+
+		'\t{\r\n'+
+		'\tString __status_data = database.getValue("'+currentTable+'_apv", "'+currentTable+'_apv_id", __apv_id, "status_data");\r\n'+
+		'\tif(__status_data.equals("1"))\r\n'+
+		'\t{\r\n'+
+		'\t\t// delete source data\r\n'+
+
+		'\t\tdatabase.deleteRecord("'+currentTable+'", "'+pkey+'", __pkey_value);\r\n'+
+		'\t\tdatabase.executeQuery("update \\"'+currentTable+'_apv\\" set \\"status_approve\\" = \'-1\', \\"admin_approve_id\\" = \'"+__userID+"\', \\"ip_address_approve\\" = \'"+__remoteAddress+"\', \\"time_approve\\" = (now()::timestamp) where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'");\r\n'+
+		'\t\t// database.setRecordValue("'+currentTable+'_apv", "'+currentTable+'_apv_id", __apv_id, "status_approve", "-1");\r\n'+
+
+		'\t\t// database.executeQuery("delete from \\"'+currentTable+'\\" where \\"'+pkey+'\\" = \'"+__pkey_value+"\'");\r\n'+
+		'\t\t// database.executeQuery("update \\"'+currentTable+'_apv\\" set \\"status_approve\\" = \'-1\' where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'");\r\n'+
+		'\t}\r\n'+
+		'\telse\r\n'+
+		'\t{\r\n'+
+		'\t\tdatabase.setRecordValue("'+currentTable+'_apv", "'+currentTable+'_apv_id", __apv_id, "status_approve", "-1");\r\n'+
+		'\t\tdatabase.executeQuery("update \\"'+currentTable+'_apv\\" set \\"status_approve\\" = \'-1\', \\"admin_approve_id\\" = \'"+__userID+"\', \\"ip_address_approve\\" = \'"+__remoteAddress+"\', \\"time_approve\\" = (now()::timestamp) where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'");\r\n'+
+		'\t\t// database.setRecordValue("'+currentTable+'", "'+pkey+'", __pkey_value, "'+currentTable+'_apv_id", "0");\r\n'+
+		'\t\t// database.executeQuery("update \\"'+currentTable+'_apv\\" set \\"status_approve\\" = \'-1\' where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'");\r\n'+
+		'\t}\r\n'+
+		'\t}\r\n'+
+		'}\r\n'+
+		'}\r\n'+
+		'//[REJECT END]\r\n'+
+		'\r\n';	
+	}
+	
 	script += '%>';
 	
 	return script;
 }
 
-function generateInsertUI(formData)
+function generateInsertUI(formData, args)
 {
+	args = args || {};
+	args.withApproval = args.withApproval || false;
+	args.withTrash = args.withTrash || false;
+
 	var insertFields = getInsertFields(formData);
 	var i, j, k, inputEl, caption;
 	var script = '';
@@ -528,8 +734,12 @@ function generateInsertUI(formData)
 	script += '%>';
 	return script;
 }
-function generateUpdateUI(formData)
+function generateUpdateUI(formData, args)
 {
+	args = args || {};
+	args.withApproval = args.withApproval || false;
+	args.withTrash = args.withTrash || false;
+
 	var updateFields = getUpdateFields(formData);
 	var i, j, k, inputEl, caption;
 	var script = '';
@@ -566,9 +776,21 @@ function generateUpdateUI(formData)
 	script += templateBeforeContent(formData);
 	script += '\r\n<!-- content started here -->\r\n\r\n';
 	
+	if(args.withApproval)
+	{
+	script += '<%\r\n';
+	script += 'String __apv_id = database.getValue("'+currentTable+'", "'+pkey+'", __id, "'+currentTable+'_apv_id");\r\n';
+	script += 'if(!__apv_id.equals("0"))\r\n';
+	script += '{\r\n';
+	script += '%>';
+	script += '<div class="message-warning-require-approval"><%= error_message_require_approval %></div>\r\n';
+	script += '<%\r\n';
+	script += '}\r\n';
+	script += 'else\r\n';
+	script += '{\r\n';
+	script += '%>\r\n';
+	}
 	
-	
-		
 	script += '<form name="editform" id="editform" action="" method="post">\r\n';
 	script += '<table class="responsive responsive-two-cols" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
 	
@@ -588,6 +810,12 @@ function generateUpdateUI(formData)
 	script += '</table>\r\n';
 
 	script += '</form>\r\n';
+	if(args.withApproval)
+	{
+	script += '<%\r\n';
+	script += '}\r\n';
+	script += '%>\r\n';
+	}
 
 	script += '\r\n<!-- content ended here -->\r\n';
 	script += templateAfterContent(formData);
@@ -625,8 +853,12 @@ function generateUpdateUI(formData)
 	script += '%>';
 	return script;
 }
-function generateDetailUI(formData)
+function generateDetailUI(formData, args)
 {
+	args = args || {};
+	args.withApproval = args.withApproval || false;
+	args.withTrash = args.withTrash || false;
+
 	var detailFields = getDetailFields(formData);
 	var i, j, k, inputEl, caption, subselectArray = [];
 	var elementType = '', subselectStr = '', table = '';
@@ -637,10 +869,20 @@ function generateDetailUI(formData)
 	var pkey = (pk.length)?pk[0]:detailFields[0];
 	var pkeyFilter = getSelectedFilterType(formData, pkey);
 	var cellVal = "";
+	var cellVal2 = "";
 	var cellType = "";
+
+	var subselectArrayApv = [];
+	var tableFieldsArrayApv = [];
+	var tableFieldsApv = "",
+	subselectStrApv = "",
+	currentTableApv = "",
+	pkeyApv = "";
+
 
 	script += '<%\r\nelse if(__action.equals("detail"))\r\n{\r\n';
 	script += '// TODO: Here are your code for detail UI\r\n';
+	script += 'String __queryApv = "";\r\n';
 	script += 'if(hasPermission(__userLevel, __module_name, "detail"))\r\n{\r\n';	
 	script += 'String __id = filterInput(request, "'+pkey+'", "'+pkeyFilter+'", true);\r\n';
 	script += 'JSONObject __result = null;\r\n\r\n';
@@ -663,10 +905,13 @@ function generateDetailUI(formData)
 			}
 			subselectStr = '(select \\"'+table+'\\".\\"name\\" from \\"'+table+'\\" where \\"'+table+'\\".\\"'+field+'\\" = \\"'+currentTable+'\\".\\"'+field+'\\") as \\"'+field+'\\"';
 			subselectArray.push(subselectStr);
+			subselectStr = '(select \\"'+table+'\\".\\"name\\" from \\"'+table+'\\" where \\"'+table+'\\".\\"'+field+'\\" = \\"'+currentTable+'_apv\\".\\"'+field+'\\") as \\"'+field+'\\"';
+			subselectArrayApv.push(subselectStr);
 		}
 		else
 		{
 			tableFieldsArray.push('\\"'+currentTable+'\\".\\"'+field+'\\"');
+			tableFieldsArrayApv.push('\\"'+currentTable+'_apv\\".\\"'+field+'\\"');
 		}
 	}
 	if(subselectArray.length)
@@ -677,8 +922,24 @@ function generateDetailUI(formData)
 	{
 		subselectStr = ' '; 
 	}
+	if(subselectArrayApv.length)
+	{
+		subselectStrApv = ', "+\r\n"'+subselectArrayApv.join(', "+\r\n"')+' "+\r\n"'
+	}
+	else
+	{
+		subselectStrApv = ' '; 
+	}
 	tableFields = tableFieldsArray.join(', ');
-	script += '\r\n__query = "select '+tableFields+''+subselectStr+'from \\"'+currentTable+'\\" where \\"'+pkey+'\\" = \'"+__id+"\'";\r\n';
+	tableFieldsApv = tableFieldsArrayApv.join(', ');
+	
+	
+	
+	script += '\r\n';
+	script += '__query = "select '+tableFields+''+subselectStr+'from \\"'+currentTable+'\\" where \\"'+pkey+'\\" = \'"+__id+"\'";\r\n';
+	
+	
+	
 	script += '\r\ntry\r\n{\r\n';
 	script += '\r\ndb_rs = database.executeQuery(__query);\r\n';
 	script += 'if(db_rs.isBeforeFirst())\r\n{\r\n';
@@ -694,8 +955,62 @@ function generateDetailUI(formData)
 	script += templateBeforeContent(formData);
 	script += '\r\n<!-- content started here -->\r\n\r\n';
 	script += '<form name="detailform" id="detailform" action="" method="post">\r\n';
-	script += '<table class="responsive responsive-two-cols" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
 	
+	
+	if(args.withApproval)
+	{
+	script += '<%\r\n';
+	script += 'ResultSet __apvData = null;\r\n';
+	script += 'boolean __needApproval = false;\r\n';
+	script += 'String __apv_id = database.getValue("'+currentTable+'", "'+pkey+'", __id, "'+currentTable+'_apv_id");\r\n';
+	script += 'if(!__apv_id.equals("0"))\r\n';
+	script += '{\r\n';
+	script += '__queryApv = "select '+tableFieldsApv+''+subselectStrApv+'from \\"'+currentTable+'_apv\\" where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'";\r\n';
+	script += '__apvData = database.getRecord(__queryApv);\r\n';
+	script += 'if(__apvData != null)\r\n';
+	script += '{\r\n';
+	script += '__needApproval = true;\r\n';
+	script += '}\r\n';
+	script += '}\r\n';
+
+	script += '\r\n';
+
+	script += 'if(__needApproval)\r\n';
+	script += '{\r\n';
+	script += '%>\r\n';
+
+	script += '<table class="responsive responsive-three-cols" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
+	for(i in detailFields)
+	{
+		caption = getFieldValues(formData, 'caption_'+detailFields[i]);
+		cellType = getSelectedElementType(formData, detailFields[i]);
+		if(cellType == 'checkbox')
+		{
+			cellVal = '(d__'+detailFields[i]+' == null)?"No":((d__'+detailFields[i]+'.equals("1"))?"Yes":"No")';
+			cellVal2 = '(__apvData.getString("'+detailFields[i]+'") == null)?"No":((__apvData.getString("'+detailFields[i]+'").equals("1"))?"Yes":"No")';
+		}
+		else
+		{
+			cellVal = 'd__'+detailFields[i];
+			cellVal2 = '__apvData.getString("'+detailFields[i]+'")';
+		}
+		script += '\t<tr>\r\n';
+		script += '\t\t<td>'+caption+'</td>\r\n';
+		script += '\t\t<td><%= '+cellVal+' %></td>\r\n';
+		script += '\t\t<td><%= '+cellVal2+' %></td>\r\n';
+		script += '\t</tr>\r\n';
+	}
+	script += '</table>\r\n';
+
+	script += '<%\r\n';
+	script += '}\r\n';
+	script += 'else\r\n';
+	script += '{\r\n';
+	script += '%>\r\n';
+
+	}
+
+	script += '<table class="responsive responsive-two-cols" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
 	for(i in detailFields)
 	{
 		caption = getFieldValues(formData, 'caption_'+detailFields[i]);
@@ -708,13 +1023,44 @@ function generateDetailUI(formData)
 		{
 			cellVal = 'd__'+detailFields[i];
 		}
-		script += '\t<tr>\r\n\t\t<td>'+caption+'</td>\r\n\t\t<td><%= '+cellVal+' %></td>\r\n\t</tr>\r\n';
+		script += '\t<tr>\r\n';
+		script += '\t\t<td>'+caption+'</td>\r\n';
+		script += '\t\t<td><%= '+cellVal+' %></td>\r\n';
+		script += '\t</tr>\r\n';
 	}
 	script += '</table>\r\n';
+
+	if(args.withApproval)
+	{
+	script += '<%\r\n';
+	script += '}\r\n';
+	script += '%>\r\n';
+	}
 	
 	script += '<table class="responsive responsive-two-cols responsive-button-area" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
 	script += '\t<tr>\r\n\t\t<td>&nbsp;</td>\r\n\t\t<td>\r\n';
-	script += '\t\t\t<input type="button" class="btn btn-success" id="edit" name="button_edit" value="Edit" onclick="window.location=\'<%= __self_name %>?user_action=update&'+pkey+'=<%= __id %>\'">\r\n';
+	
+	if(args.withApproval)
+	{
+		script += '<%\r\n';
+		script += 'if(__needApproval && hasPermission(__userLevel, __module_name, "detail"))\r\n';
+		script += '{\r\n';
+		script += '%>\r\n';
+
+		script += '\t\t\t<input type="button" class="btn btn-success" id="approve" name="button_approve" value="Approve" onclick="approveData(\'<%= __self_name %>\', \''+pkey+'\', \'<%= __id %>\')">\r\n';
+		script += '\t\t\t<input type="button" class="btn btn-danger" id="reject" name="button_reject" value="Reject" onclick="rejectData(\'<%= __self_name %>\', \''+pkey+'\', \'<%= __id %>\')">\r\n';
+		
+		script += '<%\r\n';
+		script += '}\r\n';
+		script += 'else if(hasPermission(__userLevel, __module_name, "update"))\r\n';
+		script += '{\r\n';
+		script += '%>\r\n';
+		script += '\t\t\t<input type="button" class="btn btn-success" id="edit" name="button_edit" value="Edit" onclick="window.location=\'<%= __self_name %>?user_action=update&'+pkey+'=<%= __id %>\'">\r\n';
+		script += '<%\r\n';
+		script += '}\r\n';
+		script += '%>\r\n';
+	}
+	
 	script += '\t\t\t<input type="button" class="btn btn-primary" id="showall" value="Show All" onclick="window.location=\'<%= __self_name %>\'">\r\n';
 	script += '\t\t</td>\r\n\t</tr>\r\n';
 	script += '</table>\r\n';
@@ -757,8 +1103,12 @@ function generateDetailUI(formData)
 	script += '%>';
 	return script;
 }
-function generateListUI(formData)
+function generateListUI(formData, args)
 {
+	args = args || {};
+	args.withApproval = args.withApproval || false;
+	args.withTrash = args.withTrash || false;
+
 	var listFields = getListFields(formData);
 	var i, j, k, inputEl, caption, subselectArray = [];
 	var elementType = '', subselectStr = '', table = '';
@@ -1389,7 +1739,7 @@ function getSelectedDataTypeForServer(formData, field)
 	}
 	return dataType;
 }
-
+var SQLFromServer = "";
 function loadJSONFromServer(selector, url, host, port, username, password, database, table)
 {
 	$(selector).empty();
@@ -1398,8 +1748,10 @@ function loadJSONFromServer(selector, url, host, port, username, password, datab
 		data:{host:host, port:port, username:username, password:password, database:database, table:table},
 		type:"GET",
 		dataType:"JSON",
-		success: function(data)
+		success: function(answer)
 		{
+			var data = answer.fields;
+			SQLFromServer = Base64.decode(answer.query);
 			var i;
 			var field, args;
 			var DOMHTML;
@@ -1553,6 +1905,28 @@ function arrayUnique(arr1)
 	return arr2;
 }
 
+String.prototype.equalIgnoreCase = function(str)
+{
+	var str1 = this;
+	if(str1.toLowerCase() == str.toLowerCase())
+	return true;
+	return false;
+}
+function isKeyWord(str)
+{
+	str = str.toString();
+	var i, j;
+	var kw = keyWords.split(",");
+	for(i in kw)
+	{
+		if(str.equalIgnoreCase(kw[i]))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+var keyWords = "absolute,action,add,admin,after,aggregate,alias,all,allocate,alter,analyse,analyze,and,any,are,array,as,asc,assertion,at,authorization,avg,before,begin,between,binary,bit,bit_length,blob,boolean,both,breadth,by,call,cascade,cascaded,case,cast,catalog,char,character,character_length,char_length,check,class,clob,close,coalesce,collate,collation,column,commit,completion,connect,connection,constraint,constraints,constructor,continue,convert,corresponding,count,create,cross,cube,current,current_date,current_path,current_role,current_time,current_timestamp,current_user,cursor,cycle,data,date,day,deallocate,dec,decimal,declare,default,deferrable,deferred,delete,depth,deref,desc,describe,descriptor,destroy,destructor,deterministic,diagnostics,dictionary,disconnect,distinct,do,domain,double,drop,dynamic,each,else,end,end-exec,equals,escape,every,except,exception,exec,execute,exists,external,extract,false,fetch,first,float,for,foreign,found,free,from,full,function,general,get,global,go,goto,grant,group,grouping,having,host,hour,identity,ignore,immediate,in,indicator,initialize,initially,inner,inout,input,insensitive,insert,int,integer,intersect,interval,into,is,isolation,iterate,join,key,language,large,last,lateral,leading,left,less,level,like,limit,local,localtime,localtimestamp,locator,lower,map,match,max,min,minute,modifies,modify,module,month,names,national,natural,nchar,nclob,new,next,no,none,not,null,nullif,numeric,object,octet_length,of,off,offset,old,on,only,open,operation,option,or,order,ordinality,out,outer,output,overlaps,pad,parameter,parameters,partial,path,placing,position,postfix,precision,prefix,preorder,prepare,preserve,primary,prior,privileges,procedure,public,read,reads,real,recursive,ref,references,referencing,relative,restrict,result,return,returns,revoke,right,role,rollback,rollup,routine,row,rows,savepoint,schema,scope,scroll,search,second,section,select,sequence,session,session_user,set,sets,size,smallint,some,space,specific,specifictype,sql,sqlcode,sqlerror,sqlexception,sqlstate,sqlwarning,start,state,statement,static,structure,substring,sum,system_user,table,temporary,terminate,than,then,time,timestamp,timezone_hour,timezone_minute,to,trailing,transaction,translate,translation,treat,trigger,trim,true,under,union,unique,unknown,unnest,update,upper,usage,user,using,value,values,varchar,variable,varying,view,when,whenever,where,with,without,work,write,year,zone";
 
 String.prototype.replaceAll = function(str1, str2, ignore) 
 {
@@ -1585,9 +1959,11 @@ String.prototype.prettify = function()
 
 function generateRow(field, args)
 {
+	var isKW = isKeyWord(field);
+	var cls = (isKW)?' class="reserved"':'';
 	var rowHTML =
-	'<tr>\r\n'+
-	'  <td>'+field+'<input type="hidden" name="field" value="'+field+'"></td>\r\n'+
+	'<tr'+cls+'>\r\n'+
+	'  <td class="field-name">'+field+'<input type="hidden" name="field" value="'+field+'"></td>\r\n'+
 	'  <td><input type="text" name="caption_'+field+'" value="'+field.replaceAll("_", " ").capitalize().prettify()+'" autocomplete="off" spellcheck="false"></td>\r\n'+
 	'  <td align="center"><input type="checkbox" name="include_insert_'+field+'" value="1" checked="checked"></td>\r\n'+
 	'  <td align="center"><input type="checkbox" name="include_edit_'+field+'" value="1" checked="checked"></td>\r\n'+
@@ -1610,7 +1986,121 @@ function generateRow(field, args)
 	'</tr>\r\n';
 	return rowHTML;
 }
+var Base64 = {
+// private property
+_keyStr : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
+// public method for encoding
+encode : function (input) {
+    var output = "";
+    var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
+    var i = 0;
+    input = Base64._utf8_encode(input);
+    while (i < input.length) {
+        chr1 = input.charCodeAt(i++);
+        chr2 = input.charCodeAt(i++);
+        chr3 = input.charCodeAt(i++);
+        enc1 = chr1 >> 2;
+        enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+        enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+        enc4 = chr3 & 63;
+        if (isNaN(chr2)) {
+            enc3 = enc4 = 64;
+        } else if (isNaN(chr3)) {
+            enc4 = 64;
+        }
+        output = output +
+        this._keyStr.charAt(enc1) + this._keyStr.charAt(enc2) +
+        this._keyStr.charAt(enc3) + this._keyStr.charAt(enc4);
+    }
+    return output;
+},
 
+// public method for decoding
+decode : function (input) {
+    var output = "";
+    var chr1, chr2, chr3;
+    var enc1, enc2, enc3, enc4;
+    var i = 0;
+    input = input.replace(/[^A-Za-z0-9\+\/\=]/g, "");
+    while (i < input.length) {
+        enc1 = this._keyStr.indexOf(input.charAt(i++));
+        enc2 = this._keyStr.indexOf(input.charAt(i++));
+        enc3 = this._keyStr.indexOf(input.charAt(i++));
+        enc4 = this._keyStr.indexOf(input.charAt(i++));
+        chr1 = (enc1 << 2) | (enc2 >> 4);
+        chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+        chr3 = ((enc3 & 3) << 6) | enc4;
+        output = output + String.fromCharCode(chr1);
+        if (enc3 != 64) {
+            output = output + String.fromCharCode(chr2);
+        }
+        if (enc4 != 64) {
+            output = output + String.fromCharCode(chr3);
+        }
+    }
+    output = Base64._utf8_decode(output);
+    return output;
+},
+
+// private method for UTF-8 encoding
+_utf8_encode : function (string) {
+    string = string.replace(/\r\n/g,"\n");
+    var utftext = "";
+
+    for (var n = 0; n < string.length; n++) {
+
+        var c = string.charCodeAt(n);
+
+        if (c < 128) {
+            utftext += String.fromCharCode(c);
+        }
+        else if((c > 127) && (c < 2048)) {
+            utftext += String.fromCharCode((c >> 6) | 192);
+            utftext += String.fromCharCode((c & 63) | 128);
+        }
+        else {
+            utftext += String.fromCharCode((c >> 12) | 224);
+            utftext += String.fromCharCode(((c >> 6) & 63) | 128);
+            utftext += String.fromCharCode((c & 63) | 128);
+        }
+
+    }
+
+    return utftext;
+},
+
+// private method for UTF-8 decoding
+_utf8_decode : function (utftext) {
+    var string = "";
+    var i = 0;
+    var c = c1 = c2 = 0;
+
+    while ( i < utftext.length ) {
+
+        c = utftext.charCodeAt(i);
+
+        if (c < 128) {
+            string += String.fromCharCode(c);
+            i++;
+        }
+        else if((c > 191) && (c < 224)) {
+            c2 = utftext.charCodeAt(i+1);
+            string += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
+            i += 2;
+        }
+        else {
+            c2 = utftext.charCodeAt(i+1);
+            c3 = utftext.charCodeAt(i+2);
+            string += String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
+            i += 3;
+        }
+
+    }
+
+    return string;
+}
+
+}
 </script>
 </head>
 
@@ -1622,6 +2112,7 @@ function generateRow(field, args)
     	<li><a href="#config">Database</a></li>
     	<li><a href="#define">Define</a></li>
     	<li><a href="#result">Result</a></li>
+    	<li><a href="#sql-query">Query</a></li>    
     	<li><a href="#docs">Docs</a></li>
     </ul>
     
@@ -1651,10 +2142,6 @@ function generateRow(field, args)
                 <tr>
                     <td>Table</td>
                     <td><input type="text" name="table" id="table"> <input type="button" name="load_table" id="load_table" value="Load Tables"></td>
-                </tr>
-                <tr>
-                    <td>Quote</td>
-                    <td><label><input type="checkbox" name="quote" id="quote"> Quote table and column</label></td>
                 </tr>
                 <tr>
                     <td>&nbsp;</td>
@@ -1702,7 +2189,11 @@ function generateRow(field, args)
           </table>
           <div class="button-area">
           	<input type="hidden" name="table" value="">
-          	<input type="submit" name="generate" id="generate" value="Generate Script">
+          	<input type="submit" name="generate" id="generate" value="Generate Script"> &nbsp;
+			<label><input type="checkbox" name="with_approval" id="with_approval" value="1"> Approval</label> &nbsp;
+			<label><input type="checkbox" name="with_trash" id="with_trash" value="1"> Trash</label> &nbsp;
+			<label><input type="checkbox" name="quote" id="quote" value="1"> Quote table and column</label> &nbsp;
+
           </div>
       </form>
       </div>
@@ -1712,6 +2203,11 @@ function generateRow(field, args)
     <div id="result">
     	<div class="code-area">
        	<textarea class="text-code" id="text-code" spellcheck="false"></textarea>
+        </div>
+    </div>
+    <div id="sql-query">
+    	<div class="code-area">
+       	<textarea class="text-code" id="sql-from-server" spellcheck="false"></textarea>
         </div>
     </div>
     <div id="docs">
@@ -1759,7 +2255,6 @@ function generateRow(field, args)
         <p>&lt;input type=&quot;date&quot;&gt;, &lt;input type=&quot;datetime&quot;&gt;, &lt;input type=&quot;time&quot;&gt; and &lt;input type=&quot;color&quot;&gt; are not applied on this generator because not all browsers support these input type. You can use JavaScript library for its.</p>
 		</div>
     </div>
-    
 </div>
 </div>
 </body>
