@@ -154,7 +154,6 @@ $(document).ready(function(e) {
 
 	$(document).on('submit', '#formgenerator', function(e)
 	{
-		//alert('Generate Script Here');
 		$('.tabs').find(' > ul > li > a[href="#result"]').click();
 		var formData = $(this).serializeArray(); 
 		var script = "";
@@ -177,7 +176,6 @@ $(document).ready(function(e) {
 		}
 		
 		initCodeMirror();
-		
 		editor.getDoc().setValue(script);
 		editor2.getDoc().setValue(SQLFromServer);
 		e.preventDefault();
@@ -209,7 +207,6 @@ $(document).ready(function(e) {
 				}
 			}
 		});
-	
 	});
 	$(document).on('click', '#load_structure', function(e){
 		var selector = ".main-table tbody";
@@ -241,15 +238,13 @@ $(document).ready(function(e) {
 				$('#quote').attr('data-reserved', 'false');
 			}
 		}, 1000);
-		
-		
 	});
 	$(document).on('change', '#quote', function(e){
 		var chk = $('#quote')[0].checked;
 		if(!chk && $(this).attr('data-reserved') == 'true')
 		{
 			alert('This table contain PostgreSQL reserved word. You must quote table and field name.');
-			$('#quote')[0].checked = true;
+			//$('#quote')[0].checked = true;
 		}
 	});
 	$(document).on('change keyup blur', '#formdatabase input[type="text"], #formdatabase input[type="password"]', function(e){
@@ -270,7 +265,6 @@ $(document).ready(function(e) {
 			console.log(contra);
 		}
 	});
-	
 	loadConfig();
 });
 function getContraVal(val)
@@ -292,7 +286,6 @@ function loadConfig()
 	$('.config-table [name="password"]').val(password);
 	$('.config-table [name="database"]').val(database);
 	$('.config-table [name="table"]').val(table);
-
 }
 
 function finalizeString(script)
@@ -327,10 +320,10 @@ function generateController(formData, args)
 	script += '<%\r\n';
 	
 	script += '// declare all variables\r\n\r\n';
-	script += 'String __self_name = "'+currentTable.replaceAll('_', '-')+'.jsp";\r\n';
-	script += 'String __table_name = "'+currentTable+'";\r\n';
-	script += 'String __module_name = "'+currentTable.replaceAll('_', '-')+'";\r\n';
-	script += 'String __module_title = "'+currentTable.replaceAll('_', ' ').capitalize().prettify()+'";\r\n';
+	script += '__self_name = "'+currentTable.replaceAll('_', '-')+'.jsp";\r\n';
+	script += '__table_name = "'+currentTable+'";\r\n';
+	script += '__module_name = "'+currentTable.replaceAll('_', '-')+'";\r\n';
+	script += '__module_title = "'+currentTable.replaceAll('_', ' ').capitalize().prettify()+'";\r\n\r\n';
 	
 	script += 'String __pkey_name = "'+pkey+'";\r\n';
 	script += 'String __pkey_value = "";\r\n';
@@ -342,6 +335,11 @@ function generateController(formData, args)
 	script += 'String __deactivate = filterInput(request, "data_deactivate", "FILTER_SANITIZE_STRING", true);\r\n';
 	script += 'String __delete = filterInput(request, "data_delete", "FILTER_SANITIZE_STRING", true);\r\n\r\n';
 	script += 'String __save = filterInput(request, "button_save", "FILTER_SANITIZE_STRING", true);\r\n\r\n';
+	
+	script += '// You can comment two lines below in case you don\'t want to use it.\r\n';
+	script += '__permission = getPermission(__userLevel, __module_name);\r\n';
+	script += 'createUserLog(request, __userID, __module_name, __action);\r\n\r\n';
+	
 	script += 'int int_i = 0, int_j = 0, int_k = 0;\r\n';
 	
 	var insertFields = getInsertFields(formData);
@@ -415,7 +413,6 @@ function generateController(formData, args)
 	///////////////  APPROVAL END  /////////////////
 	////////////////////////////////////////////////
 	
-	
 	script += '\tresponse.sendRedirect(__self_name+"?user_action=detail&'+pkey+'="+newID);\r\n';
 	script += '}\r\n';
 	
@@ -437,7 +434,6 @@ function generateController(formData, args)
 	script += 'if(__action.equals("update") && !__save.equals("")) \r\n{\r\n';
 	script += 'if(hasPermission(__userLevel, __module_name, "update"))\r\n{\r\n';
 	script += '\t__pkey_value = filterInput(request, "'+pkey+'", "'+pkeyFilter+'", true);\r\n';
-
 
 	////////////////////////////////////////////////
 	/////////////// APPROVAL BEGIN /////////////////
@@ -468,7 +464,6 @@ function generateController(formData, args)
 		script += '\t// Need approval';
 		script += '\r\n';
 		script += '\r\n';
-
 	}
 	else
 	{
@@ -656,7 +651,7 @@ function generateController(formData, args)
 		'\t{\r\n'+
 		'\t\tdatabase.setRecordValue("'+currentTable+'_apv", "'+currentTable+'_apv_id", __apv_id, "status_approve", "-1");\r\n'+
 		'\t\tdatabase.executeQuery("update \\"'+currentTable+'_apv\\" set \\"status_approve\\" = \'-1\', \\"admin_approve_id\\" = \'"+__userID+"\', \\"ip_address_approve\\" = \'"+__remoteAddress+"\', \\"time_approve\\" = (now()::timestamp) where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'");\r\n'+
-		'\t\t// database.setRecordValue("'+currentTable+'", "'+pkey+'", __pkey_value, "'+currentTable+'_apv_id", "0");\r\n'+
+		'\t\tdatabase.setRecordValue("'+currentTable+'", "'+pkey+'", __pkey_value, "'+currentTable+'_apv_id", "0");\r\n'+
 		'\t\t// database.executeQuery("update \\"'+currentTable+'_apv\\" set \\"status_approve\\" = \'-1\' where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'");\r\n'+
 		'\t}\r\n'+
 		'\t}\r\n'+
@@ -778,17 +773,18 @@ function generateUpdateUI(formData, args)
 	
 	if(args.withApproval)
 	{
-	script += '<%\r\n';
-	script += 'String __apv_id = database.getValue("'+currentTable+'", "'+pkey+'", __id, "'+currentTable+'_apv_id");\r\n';
-	script += 'if(!__apv_id.equals("0"))\r\n';
-	script += '{\r\n';
-	script += '%>';
-	script += '<div class="message-warning-require-approval"><%= error_message_require_approval %></div>\r\n';
-	script += '<%\r\n';
-	script += '}\r\n';
-	script += 'else\r\n';
-	script += '{\r\n';
-	script += '%>\r\n';
+		script += '<%\r\n';
+		script += 'String __apv_id = database.getValue("'+currentTable+'", "'+pkey+'", __id, "'+currentTable+'_apv_id");\r\n';
+		script += "if(__apv_id == null) __apv_id = \"0\";\r\n";
+		script += 'if(!__apv_id.equals("0"))\r\n';
+		script += '{\r\n';
+		script += '%>';
+		script += '<div class="message-warning-require-approval"><%= error_message_require_approval %></div>\r\n';
+		script += '<%\r\n';
+		script += '}\r\n';
+		script += 'else\r\n';
+		script += '{\r\n';
+		script += '%>\r\n';
 	}
 	
 	script += '<form name="editform" id="editform" action="" method="post">\r\n';
@@ -812,9 +808,9 @@ function generateUpdateUI(formData, args)
 	script += '</form>\r\n';
 	if(args.withApproval)
 	{
-	script += '<%\r\n';
-	script += '}\r\n';
-	script += '%>\r\n';
+		script += '<%\r\n';
+		script += '}\r\n';
+		script += '%>\r\n';
 	}
 
 	script += '\r\n<!-- content ended here -->\r\n';
@@ -933,12 +929,8 @@ function generateDetailUI(formData, args)
 	tableFields = tableFieldsArray.join(', ');
 	tableFieldsApv = tableFieldsArrayApv.join(', ');
 	
-	
-	
 	script += '\r\n';
 	script += '__query = "select '+tableFields+''+subselectStr+'from \\"'+currentTable+'\\" where \\"'+pkey+'\\" = \'"+__id+"\'";\r\n';
-	
-	
 	
 	script += '\r\ntry\r\n{\r\n';
 	script += '\r\ndb_rs = database.executeQuery(__query);\r\n';
@@ -959,55 +951,69 @@ function generateDetailUI(formData, args)
 	
 	if(args.withApproval)
 	{
-	script += '<%\r\n';
-	script += 'ResultSet __apvData = null;\r\n';
-	script += 'boolean __needApproval = false;\r\n';
-	script += 'String __apv_id = database.getValue("'+currentTable+'", "'+pkey+'", __id, "'+currentTable+'_apv_id");\r\n';
-	script += 'if(!__apv_id.equals("0"))\r\n';
-	script += '{\r\n';
-	script += '__queryApv = "select '+tableFieldsApv+''+subselectStrApv+'from \\"'+currentTable+'_apv\\" where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'";\r\n';
-	script += '__apvData = database.getRecord(__queryApv);\r\n';
-	script += 'if(__apvData != null)\r\n';
-	script += '{\r\n';
-	script += '__needApproval = true;\r\n';
-	script += '}\r\n';
-	script += '}\r\n';
-
-	script += '\r\n';
-
-	script += 'if(__needApproval)\r\n';
-	script += '{\r\n';
-	script += '%>\r\n';
-
-	script += '<table class="responsive responsive-three-cols" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
-	for(i in detailFields)
-	{
-		caption = getFieldValues(formData, 'caption_'+detailFields[i]);
-		cellType = getSelectedElementType(formData, detailFields[i]);
-		if(cellType == 'checkbox')
-		{
-			cellVal = '(d__'+detailFields[i]+' == null)?"No":((d__'+detailFields[i]+'.equals("1"))?"Yes":"No")';
-			cellVal2 = '(__apvData.getString("'+detailFields[i]+'") == null)?"No":((__apvData.getString("'+detailFields[i]+'").equals("1"))?"Yes":"No")';
-		}
-		else
-		{
-			cellVal = 'd__'+detailFields[i];
-			cellVal2 = '__apvData.getString("'+detailFields[i]+'")';
-		}
-		script += '\t<tr>\r\n';
-		script += '\t\t<td>'+caption+'</td>\r\n';
-		script += '\t\t<td><%= '+cellVal+' %></td>\r\n';
-		script += '\t\t<td><%= '+cellVal2+' %></td>\r\n';
+		script += '<%\r\n';
+		script += 'ResultSet __apvData = null;\r\n';
+		script += 'boolean __needApproval = false;\r\n';
+		script += 'String __apv_id = database.getValue("'+currentTable+'", "'+pkey+'", __id, "'+currentTable+'_apv_id");\r\n';
+		script += "if(__apv_id == null) __apv_id = \"0\";\r\n";
+		script += 'if(!__apv_id.equals("0"))\r\n';
+		script += '{\r\n';
+		script += '__queryApv = "select '+tableFieldsApv+''+subselectStrApv+'from \\"'+currentTable+'_apv\\" where \\"'+currentTable+'_apv_id\\" = \'"+__apv_id+"\'";\r\n';
+		script += '__apvData = database.getRecord(__queryApv);\r\n';
+		script += 'if(__apvData != null)\r\n';
+		script += '{\r\n';
+		script += '__needApproval = true;\r\n';
+		script += '}\r\n';
+		script += '}\r\n';
+	
+		script += '\r\n';
+	
+		script += 'if(__needApproval)\r\n';
+		script += '{\r\n';
+		script += '%>\r\n';
+	
+		script += '<script type="text/javascript">\r\n';
+		script += '\t$(document).ready(function(){\r\n';
+		script += '\tcompareData(\'.responsive-three-cols\');\r\n';
+		script += '});\r\n';
+		script += '<'+'/script'+'>\r\n';
+	
+		
+		script += '<table class="responsive responsive-three-cols" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
+	
+		script += '\t<tr class="row-label-three-cols">\r\n';
+		script += '\t\t<td><span>Label</span></td>\r\n';
+		script += '\t\t<td><span>Current Data</span></td>\r\n';
+		script += '\t\t<td><span>Draff</span></td>\r\n';
 		script += '\t</tr>\r\n';
-	}
-	script += '</table>\r\n';
-
-	script += '<%\r\n';
-	script += '}\r\n';
-	script += 'else\r\n';
-	script += '{\r\n';
-	script += '%>\r\n';
-
+		
+		for(i in detailFields)
+		{
+			caption = getFieldValues(formData, 'caption_'+detailFields[i]);
+			cellType = getSelectedElementType(formData, detailFields[i]);
+			if(cellType == 'checkbox')
+			{
+				cellVal = '(d__'+detailFields[i]+' == null)?"No":((d__'+detailFields[i]+'.equals("1"))?"Yes":"No")';
+				cellVal2 = '(__apvData.getString("'+detailFields[i]+'") == null)?"No":((__apvData.getString("'+detailFields[i]+'").equals("1"))?"Yes":"No")';
+			}
+			else
+			{
+				cellVal = 'd__'+detailFields[i];
+				cellVal2 = '__apvData.getString("'+detailFields[i]+'")';
+			}
+			script += '\t<tr>\r\n';
+			script += '\t\t<td><span>'+caption+'</span></td>\r\n';
+			script += '\t\t<td><span class="compare"><%= '+cellVal+' %></span></td>\r\n';
+			script += '\t\t<td><span class="compare"><%= '+cellVal2+' %></span></td>\r\n';
+			script += '\t</tr>\r\n';
+		}
+		script += '</table>\r\n';
+	
+		script += '<%\r\n';
+		script += '}\r\n';
+		script += 'else\r\n';
+		script += '{\r\n';
+		script += '%>\r\n';
 	}
 
 	script += '<table class="responsive responsive-two-cols" border="0" cellpadding="0" cellspacing="0" width="100%">\r\n';
@@ -1043,7 +1049,7 @@ function generateDetailUI(formData, args)
 	if(args.withApproval)
 	{
 		script += '<%\r\n';
-		script += 'if(__needApproval && hasPermission(__userLevel, __module_name, "detail"))\r\n';
+		script += 'if(__needApproval && hasPermission(__userLevel, __module_name, "approve"))\r\n';
 		script += '{\r\n';
 		script += '%>\r\n';
 
@@ -1109,6 +1115,7 @@ function generateListUI(formData, args)
 	args.withApproval = args.withApproval || false;
 	args.withTrash = args.withTrash || false;
 
+	var needApv = '';
 	var listFields = getListFields(formData);
 	var i, j, k, inputEl, caption, subselectArray = [];
 	var elementType = '', subselectStr = '', table = '';
@@ -1120,11 +1127,15 @@ function generateListUI(formData, args)
 	var cellVal = "";
 	var cellType = "";
 
-	
 	var filters = generateListFilter(formData, currentTable);		
 
 	script += '<%\r\nelse\r\n{\r\n';
 	script += '// TODO: Here are your code for list UI\r\n';
+
+	script += 'boolean __hasPermissionInsert = hasPermission(__userLevel, __module_name, "insert");\r\n';
+	script += 'boolean __hasPermissionUpdate = hasPermission(__userLevel, __module_name, "update");\r\n';
+	script += 'boolean __hasPermissionDelete = hasPermission(__userLevel, __module_name, "delete");\r\n';
+	
 	script += 'if(hasPermission(__userLevel, __module_name, "list"))\r\n{\r\n';	
 	script += 'String __id = "";\r\n';
 	script += 'int int_n = 0;\r\n';
@@ -1148,11 +1159,14 @@ function generateListUI(formData, args)
 
 	
 	script += '\r\n';
+	if(args.withApproval)
+	{
+		script += 'String d__'+currentTable+'_apv_id = "";\r\n';
+	}
 	for(i in listFields)
 	{
 		field = listFields[i];
 		script += 'String d__'+field+' = "";\r\n';
-		
 		elementType = getSelectedElementType(formData, field);
 		if(elementType == 'select')
 		{
@@ -1185,6 +1199,10 @@ function generateListUI(formData, args)
 		tableFields = '\\"'+currentTable+'\\".\\"'+pkey+'\\", '+tableFields;
 	}
 	
+	if(args.withApproval)
+	{
+		tableFields += ', coalesce(\\"'+currentTable+'\\".\\"'+currentTable+'_apv_id\\", \'0\') as \\"'+currentTable+'_apv_id\\" ';
+	}
 	
 	script += '\r\n'; 
 	script += 'String sql__query = "";\r\n';
@@ -1225,17 +1243,23 @@ function generateListUI(formData, args)
 				'});\r\n'+
 				'</'+'script'+'>\r\n';
 				
-				
-
 	script += '\r\<div class="search-bar">\r\n'+
 				'	<form name="searchform" id="searchform" method="get" action="">\r\n'+
 				'    	<!-- add some filters here -->\r\n'+
-//				'    	<span class="searchform-label">'+currentTable.replaceAll('_', ' ').capitalize().prettify()+'</span>\r\n'+
 				'        <span class="searchform-control">\r\n'+
 							filters.elements+				
-				((filters.elements.length > 10)?'        	<input type="submit" class="btn btn-success" value="Search">\r\n':'')+
-				'        	<input type="button" class="btn btn-primary" value="Add" onclick="window.location=\'<%= __self_name %>?user_action=insert\'">\r\n'+
-				'        </span>\r\n'+
+				((filters.elements.length > 10)?'        	<input type="submit" class="btn btn-success" value="Search">\r\n':'');
+				
+	script += '\t\t\t<%\r\n';
+	script += '\t\t\tif(__hasPermissionInsert)\r\n';
+    script += '\t\t\t{\r\n';
+    script += '\t\t\t%>\r\n';			
+				
+    script += '        	<input type="button" class="btn btn-primary" value="Add" onclick="window.location=\'<%= __self_name %>?user_action=insert\'">\r\n';
+    script += '\r\n<%\r\n';
+    script += '\t\t\t}\r\n';
+    script += '\t\t\t%>\r\n';
+    script += '        </span>\r\n'+
 				'    </form>\r\n'+
 				'</div>\r\n';
 
@@ -1281,9 +1305,14 @@ function generateListUI(formData, args)
 		field = listFields[i];
 		script += '\t\t\td__'+field+' = db_rs.getString("'+field+'");\r\n';
 	}
+	if(args.withApproval)
+	{
+		script += '\t\t\td__'+currentTable+'_apv_id = db_rs.getString("'+currentTable+'_apv_id");\r\n';
+		needApv = ' data-need-approval="<%= (d__'+currentTable+'_apv_id.equals("0"))?"false":"true" %>"';
+	}
 	script += '\t\t%>\r\n';
 	
-	script += '\t\t<tr>\r\n';
+	script += '\t\t<tr'+needApv+' data-id="<%= __id %>">\r\n';
 	script += '\t\t\t<td width="16" align="center"><input type="checkbox" class="checkbox-'+pkey+'" name="'+pkey+'" value="<%= __id %>"></td>\r\n';
 	script += '\t\t\t<td width="16" align="center"><a href="<%= __self_name %>?user_action=update&'+pkey+'=<%= __id %>" class="edit-control"><span class="fa fa-edit"></span></a></td>\r\n';
 	script += '\t\t\t<td width="16" align="center"><a href="<%= __self_name %>?user_action=detail&'+pkey+'=<%= __id %>" class="detail-control field-master"><span class="fa fa-folder"></span></a></td>\r\n';
@@ -1313,13 +1342,29 @@ function generateListUI(formData, args)
 	script += '\r\n<div data-pagination="true" data-self-name="<%= __self_name %>" data-max-record="<%= pagination_max_record %>" data-record-per-page="<%= pagination_record_per_page %>"></div>\r\n';
 	
 	script += '<div class="button-area">\r\n';
+	
+	script += '<%\r\n';
+	script += 'if(__hasPermissionUpdate)\r\n';
+	script += '{\r\n';
+	script += '%>\r\n';
+	
 	script += '\t<input type="submit" class="btn btn-success" name="data_activate" value="Activate">\r\n';
 	script += '\t<input type="submit" class="btn btn-warning" name="data_deactivate" value="Deactivate">\r\n';
+
+	script += '<%\r\n';
+	script += '}\r\n';
+	script += 'if(__hasPermissionDelete)\r\n';
+	script += '{\r\n';
+	script += '%>\r\n';
+
 	script += '\t<input type="submit" class="btn btn-danger" name="data_delete" value="Delete" onclick="return confirm(\'<%= warning_message_delete %>\')">\r\n';
+
+	script += '<%\r\n';
+	script += '}\r\n';
+	script += '%>\r\n';
 	script += '</div>\r\n';
 	script += '</form>\r\n';
 	
-
 	script += '<%\r\n'+
 				'}\r\n'+
 				'else\r\n'+
@@ -1829,14 +1874,12 @@ function generateSelectFilter(field, args)
     });
 	virtualDOM.find('option[value="'+filterType+'"]').attr('selected', 'selected');
 	return virtualDOM[0].outerHTML;
-
 }
 
 
 function generateSelectType(field, args)
 {
 	var virtualDOM;
-	
 	args = args || {};
 	args.type = args.type || 'text';
 	var dataType = args.type;
@@ -1848,7 +1891,7 @@ function generateSelectType(field, args)
 		'datetime':['datetime', 'timestamp'],
 		'time':['time']
 	}
-	
+
 	virtualDOM = $(
 	'<select name="data_type_'+field+'" id="data_type_'+field+'">\r\n'+
 		'<option value="text" title="&lt;input type=&quot;text&quot;&gt;">text</option>\r\n'+
@@ -2105,7 +2148,6 @@ _utf8_decode : function (utftext) {
 </head>
 
 <body>
-
 <div class="all">
 <div class="tabs">
 	<ul>
@@ -2168,17 +2210,17 @@ _utf8_decode : function (utftext) {
                   <td rowspan="2" align="center" width="32" title="Key">K</td>
                   <td rowspan="2" align="center" width="32" title="Required">R</td>
                   <td colspan="4" align="center">Element Type</td>
-                  <td width="60" colspan="2" align="center">Search</td>
-                  <td rowspan="2" width="100" align="center">Data Type</td>
-                  <td rowspan="2" width="180" align="center">Filter Type</td>
+                  <td colspan="2" align="center" width="60">Search</td>
+                  <td rowspan="2" align="center" width="100">Data Type</td>
+                  <td rowspan="2" align="center" width="180">Filter Type</td>
                 </tr>
                 <tr>
                   <td align="center" width="32" title="Input Text">TE</td>
                   <td align="center" width="32" title="Textarea">TA</td>
                   <td align="center" width="32" title="Select">SE</td>
                   <td align="center" width="32" title="Checkbox">CB</td>
-                  <td width="30" align="center">TE</td>
-                  <td width="30" align="center">SE</td>
+                  <td align="center" width="30">TE</td>
+                  <td align="center" width="30">SE</td>
                 </tr>
             </thead>
           
@@ -2193,12 +2235,9 @@ _utf8_decode : function (utftext) {
 			<label><input type="checkbox" name="with_approval" id="with_approval" value="1"> Approval</label> &nbsp;
 			<label><input type="checkbox" name="with_trash" id="with_trash" value="1"> Trash</label> &nbsp;
 			<label><input type="checkbox" name="quote" id="quote" value="1"> Quote table and column</label> &nbsp;
-
           </div>
       </form>
       </div>
-    
-
     </div>
     <div id="result">
     	<div class="code-area">
