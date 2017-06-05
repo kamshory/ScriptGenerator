@@ -38,13 +38,13 @@
 
 #strings
 'a'
-"asdf"
-r"regex"
-b"bytestring"
+&quot;asdf&quot;
+r&quot;regex&quot;
+b&quot;bytestring&quot;
 
-"""
+&quot;&quot;&quot;
 multiline string
-"""
+&quot;&quot;&quot;
 
 #identifiers
 a
@@ -66,20 +66,20 @@ F⃗ = m·a⃗
 #dicts and indexing
 x=[1, 2, 3]
 x[end-1]
-x={"julia"=>"language of technical computing"}
+x={&quot;julia&quot;=&gt;&quot;language of technical computing&quot;}
 
 
 #exception handling
 try
   f()
 catch
-  @printf "Error"
+  @printf &quot;Error&quot;
 finally
   g()
 end
 
 #types
-immutable Color{T<:Number}
+immutable Color{T&lt;:Number}
   r::T
   g::T
   b::T
@@ -97,48 +97,48 @@ f('b', (2, 3)...)
 
 #operators
 |=
-&=
+&amp;=
 ^=
 \-
 %=
 *=
 +=
 -=
-<=
->=
+&lt;=
+&gt;=
 !=
 ==
 %
 *
 +
 -
-<
->
+&lt;
+&gt;
 !
 =
 |
-&
+&amp;
 ^
 \
 ?
 ~
 :
 $
-<:
-.<
-.>
-<<
-<<=
->>
->>>>
->>=
->>>=
-<<=
-<<<=
-.<=
-.>=
+&lt;:
+.&lt;
+.&gt;
+&lt;&lt;
+&lt;&lt;=
+&gt;&gt;
+&gt;&gt;&gt;&gt;
+&gt;&gt;=
+&gt;&gt;&gt;=
+&lt;&lt;=
+&lt;&lt;&lt;=
+.&lt;=
+.&gt;=
 .==
-->
+-&gt;
 //
 in
 ...
@@ -155,13 +155,13 @@ in
 \\=
 ||
 ===
-&&
+&amp;&amp;
 |=
 .|=
-<:
->:
-|>
-<|
+&lt;:
+&gt;:
+|&gt;
+&lt;|
 ::
 x ? y : z
 

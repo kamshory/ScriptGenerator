@@ -220,8 +220,10 @@ public String showCreateTableApproval(String table)
 			ret += "\tadmin_approve_id bigint,\r\n";
 			ret += "\ttime_create timestamp without time zone DEFAULT (now())::timestamp without time zone,\r\n";
 			ret += "\ttime_approve timestamp without time zone,\r\n";
-			ret += "\tip_create character varying(50),\r\n";
-			ret += "\tip_approve character varying(50),\r\n";
+			ret += "\tip_address_create character varying(50),\r\n";
+			ret += "\tip_address_approve character varying(50),\r\n";
+			ret += "\tnote_create text,\r\n";
+			ret += "\tnote_approve text,\r\n";
 			ret += "\tstatus_approve smallint default 0,\r\n";
 			ret += "\tstatus_data smallint default 0";
 			
