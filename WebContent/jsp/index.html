@@ -217,34 +217,41 @@ $(document).ready(function(e) {
 		var password = $('.config-table [name="password"]').val();
 		var database = $('.config-table [name="database"]').val();
 		var table = $('.config-table [name="table"]').val();
-		loadJSONFromServer(selector, url, host, port, username, password, database, table);
-		$('.label-for-host').text(host);
-		$('.label-for-database').text(database);
-		$('.label-for-table').text(table);
-		$('.define-wrapper').css({display:"block"});
-		$('.tabs').find(' > ul > li > a[href="#define"]').click(); 
-		$('#formgenerator input[name="table"]').val(table);
-		
-		setTimeout(function(){
-			var isKW1 = isKeyWord(table);
-			var isKW2 = ($(selector).find('.reserved').length > 0);
-			if(isKW1 || isKW2)
-			{
-				$('#quote').attr('data-reserved', 'true');
-				$('#quote')[0].checked = true;
-			}
-			else
-			{
-				$('#quote').attr('data-reserved', 'false');
-			}
-		}, 1000);
+
+		if(database != '' && table != '')
+		{
+			loadJSONFromServer(selector, url, host, port, username, password, database, table);
+			$('.label-for-host').text(host);
+			$('.label-for-database').text(database);
+			$('.label-for-table').text(table);
+			$('.define-wrapper').css({display:"block"});
+			$('.tabs').find(' > ul > li > a[href="#define"]').click(); 
+			$('#formgenerator input[name="table"]').val(table);
+			
+			setTimeout(function(){
+				var isKW1 = isKeyWord(table);
+				var isKW2 = ($(selector).find('.reserved').length > 0);
+				if(isKW1 || isKW2)
+				{
+					$('#quote').attr('data-reserved', 'true');
+					$('#quote')[0].checked = true;
+				}
+				else
+				{
+					$('#quote').attr('data-reserved', 'false');
+				}
+			}, 1000);
+		}
+		else
+		{
+			alert('Please complete form first.');
+		}
 	});
 	$(document).on('change', '#quote', function(e){
 		var chk = $('#quote')[0].checked;
 		if(!chk && $(this).attr('data-reserved') == 'true')
 		{
 			alert('This table contain PostgreSQL reserved word. You must quote table and field name.');
-			//$('#quote')[0].checked = true;
 		}
 	});
 	$(document).on('change keyup blur', '#formdatabase input[type="text"], #formdatabase input[type="password"]', function(e){
@@ -1395,7 +1402,7 @@ function generateListUI(formData, args)
 				'%>\r\n';
 	
 	script += '<form name="mainformdata" id="mainformdata" method="post" action="">\r\n';
-	script += '\r\n<div data-pagination="true" data-self-name="<%= _self_name %>" data-max-record="<%= pagination_max_record %>" data-record-per-page="<%= pagination_record_per_page %>"></div>\r\n\r\n';			
+	script += '\r\n<div data-pagination="true" data-self-name="<%= _self_name %>" data-max-record="<%= pagination_max_record %>" data-record-per-page="<%= pagination_record_per_page %>" data-hide="<%= (pagination_max_record <= pagination_record_per_page)?"true":"false" %>"></div>\r\n\r\n';			
 	script += '<table class="table table-striped jambo_table" border="0" cellpadding="0" cellspacing="0" width="100%" data-table-sort="true" data-self-name="<%= _self_name %>">\r\n';
 	
 	script += '\t<thead>\r\n';
@@ -1416,13 +1423,13 @@ function generateListUI(formData, args)
 	if(args.withApproval)
 	{
 		script += '\t\t<%\r\n'+
-		script += '\t\tif(_permission.contains("approve"))\r\n'+
-		script += '\t\t{\r\n'+
-		script += '\t\t%>\r\n';
-		script += '\t\t\t<td>Approval</td>\r\n';
-		script += '\t\t<%\r\n'+
-		script += '\t\t}\r\n'+
-		script += '\t\t%>\r\n';
+		'\t\tif(_permission.contains("approve"))\r\n'+
+		'\t\t{\r\n'+
+		'\t\t%>\r\n';
+		'\t\t\t<td>Approval</td>\r\n';
+		'\t\t<%\r\n'+
+		'\t\t}\r\n'+
+		'\t\t%>\r\n';
 	}
 	
 	script += '\t\t</tr>\r\n';
@@ -1472,11 +1479,11 @@ function generateListUI(formData, args)
 	if(args.withApproval)
 	{
 		script += '\t\t<%\r\n'+
-		script += '\t\tif(_permission.contains("approve"))\r\n'+
-		script += '\t\t{\r\n'+
-		script += '\t\t%>\r\n';
+		'\t\tif(_permission.contains("approve"))\r\n'+
+		'\t\t{\r\n'+
+		'\t\t%>\r\n';
 		
-		script += '\t\t\t<td><%\r\n'+
+		script += '\t\t\t<td nowrap="nowrap"><%\r\n'+
 		'\t\t\tif(!d_admin_apv_id.equals("0"))\r\n'+
 		'\t\t\t{\r\n'+
 		'\t\t\t%>\r\n'+
@@ -1487,8 +1494,8 @@ function generateListUI(formData, args)
 		'\t\t\t%></td>\r\n';
 		
 		script += '\t\t<%\r\n'+
-		script += '\t\t}\r\n'+
-		script += '\t\t%>\r\n';
+		'\t\t}\r\n'+
+		'\t\t%>\r\n';
 		
 	}
 	
@@ -1498,7 +1505,7 @@ function generateListUI(formData, args)
 	script += '\t\t%>\r\n';
 	script += '\t</tbody>\r\n';
 	script += '</table>\r\n';
-	script += '\r\n<div data-pagination="true" data-self-name="<%= _self_name %>" data-max-record="<%= pagination_max_record %>" data-record-per-page="<%= pagination_record_per_page %>"></div>\r\n';
+	script += '\r\n<div data-pagination="true" data-self-name="<%= _self_name %>" data-max-record="<%= pagination_max_record %>" data-record-per-page="<%= pagination_record_per_page %>" data-hide="<%= (pagination_max_record <= pagination_record_per_page)?"true":"false" %>"></div>\r\n';
 	
 	script += '<div class="button-area">\r\n';
 	
